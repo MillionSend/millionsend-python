@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "millionsend"
+version = "0.0.1"
+description = "Official Python SDK for MillionSend — the open-source email platform. Under active development."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+keywords = ["email", "millionsend", "ses", "transactional-email"]
+
+[project.urls]
+Homepage = "https://github.com/MillionSend"
+Repository = "https://github.com/MillionSend/millionsend-python"
