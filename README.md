@@ -107,7 +107,7 @@ millionsend.Contacts.Topics.update({
 })
 ```
 
-Contacts also work without an audience (top-level `/contacts`) — omit `audience_id`.
+Reads, updates, and deletes also work without an audience (top-level `/contacts`). Creation always requires `audience_id` — the API answers 422 without it.
 
 ### Topics
 
