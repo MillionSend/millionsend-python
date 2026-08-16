@@ -1,8 +1,8 @@
 name: release
 
-# Publishes to PyPI via Trusted Publishing: configure pypi.org → project
-# millionsend → Publishing → add GitHub publisher (owner MillionSend, repo
-# millionsend-python, workflow release.yml). No token stored anywhere.
+# Publishes to PyPI via Trusted Publishing. The PyPI-side publisher is
+# registered as workflow publish.yml with environment "pypi" — both must
+# match or the OIDC exchange is refused. No token stored anywhere.
 on:
   workflow_dispatch:
 
@@ -12,6 +12,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       contents: read
       id-token: write # OIDC for PyPI Trusted Publishing
