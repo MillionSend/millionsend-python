@@ -4,13 +4,24 @@ build-backend = "hatchling.build"
 
 [project]
 name = "millionsend"
-version = "0.0.1"
-description = "Official Python SDK for MillionSend — the open-source email platform. Under active development."
+version = "0.1.0"
+description = "Official Python SDK for MillionSend — a self-hostable, Resend-compatible email API."
 readme = "README.md"
-license = { text = "MIT" }
 requires-python = ">=3.9"
-keywords = ["email", "millionsend", "ses", "transactional-email"]
+license = { text = "MIT" }
+authors = [{ name = "MillionSend" }]
+keywords = ["millionsend", "email", "resend", "ses", "transactional"]
+dependencies = ["requests>=2.25"]
 
 [project.urls]
-Homepage = "https://github.com/MillionSend"
-Repository = "https://github.com/MillionSend/millionsend-python"
+Homepage = "https://github.com/MillionSend/millionsend"
+Repository = "https://github.com/MillionSend/millionsend"
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["millionsend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
