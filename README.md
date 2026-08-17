@@ -80,25 +80,21 @@ millionsend.Batch.send([payload_a, payload_b], idempotency_key="batch-1")  # up 
 
 `to` / `cc` / `bcc` / `reply_to` accept a string or a list of strings.
 
-### Audiences & contacts
+### Contacts
+
+Contacts are team-global — one record per email address, no audiences to manage.
 
 ```python
-audience = millionsend.Audiences.create({"name": "Registered users"})
-millionsend.Audiences.list(limit=20)
-millionsend.Audiences.get(audience.id)
-millionsend.Audiences.remove(audience.id)
-
 millionsend.Contacts.create({
-    "audience_id": audience.id,
     "email": "ada@acme.dev",
     "first_name": "Ada",
     "properties": {"plan": "pro"},
 })
-millionsend.Contacts.get(audience_id=audience.id, email="ada@acme.dev")  # by id or email (email wins)
-millionsend.Contacts.get("contact-id")                                   # bare id works too
+millionsend.Contacts.get(email="ada@acme.dev")  # by id or email (email wins)
+millionsend.Contacts.get("contact-id")          # bare id works too
 millionsend.Contacts.update({"id": "contact-id", "unsubscribed": True, "first_name": None})  # None clears
 millionsend.Contacts.remove(email="ada@acme.dev")
-millionsend.Contacts.list(audience_id=audience.id, limit=50)
+millionsend.Contacts.list(limit=50)
 
 # Topic subscriptions (granular unsubscribe) — mirrors resend's contacts.topics.update
 millionsend.Contacts.Topics.update({
@@ -107,7 +103,7 @@ millionsend.Contacts.Topics.update({
 })
 ```
 
-Reads, updates, and deletes also work without an audience (top-level `/contacts`). Creation always requires `audience_id` — the API answers 422 without it.
+Creating a contact whose email already exists on the team (case-insensitive) answers 409 and raises `ValidationError`.
 
 ### Topics
 
@@ -120,9 +116,11 @@ millionsend.Topics.remove(topic_id)
 
 ### Broadcasts
 
+Target a saved segment (`segment_id`) and/or a topic (`topic_id`); set neither to send to every contact.
+
 ```python
 broadcast = millionsend.Broadcasts.create({
-    "audience_id": audience.id,
+    "segment_id": segment.id,  # optional
     "from": "Acme <news@acme.dev>",
     "subject": "Launch",
     "html": "<p>Hi {{{FIRST_NAME|there}}}</p>",
@@ -137,12 +135,11 @@ millionsend.Broadcasts.remove(broadcast.id)  # draft only
 
 ### Segments (MillionSend extension)
 
-Dynamic segments are a saved filter over an audience's contacts — a MillionSend feature with **no Resend equivalent** (the wire path is `/segments2`).
+Dynamic segments are a saved filter over the team's contacts — a MillionSend feature with **no Resend equivalent**.
 
 ```python
 segment = millionsend.Segments.create({
     "name": "Pro plan",
-    "audience_id": audience.id,
     "filter": {"match": "all", "conditions": [
         {"field": "property:plan", "op": "equals", "value": "pro"},
     ]},
@@ -169,7 +166,7 @@ millionsend.Segments.remove(segment.id)
 Method names and payloads match. Notes:
 
 - **Domains and API keys** are managed in the MillionSend dashboard, not via the API, so there are no `Domains` / `ApiKeys` resources here.
-- Resend's `Segments` is an alias of audiences; MillionSend's `Segments` is the distinct dynamic-filter feature. Use `Audiences` for a straight port.
+- **No audiences**: contacts are team-global, so there is no `Audiences` resource and no `audience_id` params. Resend's `Segments` is an alias of audiences; MillionSend's `Segments` is the distinct dynamic-filter feature.
 - MillionSend raises on API errors just like `resend`; the exception carries `.code` / `.status_code` / `.message`.
 
 ## License

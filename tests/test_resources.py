@@ -54,31 +54,11 @@ def test_batch_sends_bare_array_with_idempotency(http):
     assert len(res.data) == 2
 
 
-def test_audiences_crud(http):
-    millionsend.Audiences.create({"name": "Users"})
+def test_contacts_create(http):
+    millionsend.Contacts.create({"email": "c@x.dev", "first_name": "Ada"})
     assert http.calls[0]["method"] == "POST"
-    assert http.calls[0]["path"] == "/audiences"
-    assert http.calls[0]["body"] == {"name": "Users"}
-
-    millionsend.Audiences.get("a1")
-    assert http.calls[1]["path"] == "/audiences/a1"
-
-    millionsend.Audiences.list(limit=10)
-    assert http.calls[2]["path"] == "/audiences"
-    assert http.calls[2]["params"] == {"limit": 10}
-
-    millionsend.Audiences.remove("a1")
-    assert http.calls[3]["method"] == "DELETE"
-    assert http.calls[3]["path"] == "/audiences/a1"
-
-
-def test_contacts_create_scoped_and_top_level(http):
-    millionsend.Contacts.create({"audience_id": "a1", "email": "c@x.dev", "first_name": "Ada"})
-    assert http.calls[0]["path"] == "/audiences/a1/contacts"
+    assert http.calls[0]["path"] == "/contacts"
     assert http.calls[0]["body"] == {"email": "c@x.dev", "first_name": "Ada"}
-
-    millionsend.Contacts.create({"email": "c@x.dev"})
-    assert http.calls[1]["path"] == "/contacts"
 
 
 def test_contacts_addressing(http):
@@ -87,9 +67,6 @@ def test_contacts_addressing(http):
 
     millionsend.Contacts.get(email="c@x.dev")
     assert http.calls[1]["path"] == "/contacts/" + quote("c@x.dev", safe="")
-
-    millionsend.Contacts.get(audience_id="a1", contact_id="c1")
-    assert http.calls[2]["path"] == "/audiences/a1/contacts/c1"
 
 
 def test_contacts_email_wins_over_id(http):
@@ -108,8 +85,8 @@ def test_contacts_remove_and_list(http):
     millionsend.Contacts.remove(email="c@x.dev")
     assert http.calls[0]["method"] == "DELETE"
 
-    millionsend.Contacts.list(audience_id="a1", after="cur")
-    assert http.calls[1]["path"] == "/audiences/a1/contacts"
+    millionsend.Contacts.list(after="cur")
+    assert http.calls[1]["path"] == "/contacts"
     assert http.calls[1]["params"] == {"after": "cur"}
 
 
@@ -125,11 +102,11 @@ def test_contacts_topics_update_bare_array(http):
 
 def test_broadcasts_lifecycle(http):
     millionsend.Broadcasts.create(
-        {"audience_id": "a1", "from": "a@x.dev", "subject": "News", "html": "<p>hi</p>"}
+        {"segment_id": "s1", "from": "a@x.dev", "subject": "News", "html": "<p>hi</p>"}
     )
     assert http.calls[0]["path"] == "/broadcasts"
     assert http.calls[0]["body"] == {
-        "audience_id": "a1",
+        "segment_id": "s1",
         "from": "a@x.dev",
         "subject": "News",
         "html": "<p>hi</p>",
@@ -174,22 +151,22 @@ def test_topics_crud(http):
     assert http.calls[3]["method"] == "DELETE"
 
 
-def test_segments_crud_on_segments2(http):
+def test_segments_crud(http):
     flt = {"match": "all", "conditions": [{"field": "email", "op": "is_set"}]}
-    millionsend.Segments.create({"name": "Active", "audience_id": "a1", "filter": flt})
-    assert http.calls[0]["path"] == "/segments2"
-    assert http.calls[0]["body"] == {"name": "Active", "audience_id": "a1", "filter": flt}
+    millionsend.Segments.create({"name": "Active", "filter": flt})
+    assert http.calls[0]["path"] == "/segments"
+    assert http.calls[0]["body"] == {"name": "Active", "filter": flt}
 
     millionsend.Segments.get("s1")
-    assert http.calls[1]["path"] == "/segments2/s1"
+    assert http.calls[1]["path"] == "/segments/s1"
 
     millionsend.Segments.list(before="cur")
-    assert http.calls[2]["path"] == "/segments2"
+    assert http.calls[2]["path"] == "/segments"
     assert http.calls[2]["params"] == {"before": "cur"}
 
     millionsend.Segments.update("s1", {"name": "Renamed"})
     assert http.calls[3]["method"] == "PATCH"
-    assert http.calls[3]["path"] == "/segments2/s1"
+    assert http.calls[3]["path"] == "/segments/s1"
     assert http.calls[3]["body"] == {"name": "Renamed"}
 
     millionsend.Segments.remove("s1")

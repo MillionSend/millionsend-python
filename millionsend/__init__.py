@@ -24,7 +24,6 @@ from typing import Optional
 
 from ._client import VERSION as __version__
 from ._client import Response
-from .audiences import Audiences
 from .broadcasts import Broadcasts
 from .contacts import Contacts
 from .emails import Batch, Emails
@@ -53,7 +52,6 @@ __all__ = [
     "timeout",
     "Emails",
     "Batch",
-    "Audiences",
     "Contacts",
     "Topics",
     "Broadcasts",

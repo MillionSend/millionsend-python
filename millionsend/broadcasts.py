@@ -1,4 +1,8 @@
-"""Broadcasts — draft, schedule, send, and cancel campaigns to an audience/segment."""
+"""Broadcasts — draft, schedule, send, and cancel campaigns.
+
+Targeting is an optional ``segment_id`` and/or ``topic_id`` on create/update;
+neither set means every contact of the team.
+"""
 
 from typing import Any, Dict, Optional
 from urllib.parse import quote

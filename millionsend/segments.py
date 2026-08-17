@@ -1,6 +1,5 @@
-"""Dynamic segments — a saved filter over an audience's contacts (MillionSend
-extension, no Resend equivalent). Path is ``/segments2``; ``get`` returns a live
-``contact_count``."""
+"""Dynamic segments — a saved filter over the team's contacts (MillionSend
+extension, no Resend equivalent). ``get`` returns a live ``contact_count``."""
 
 from typing import Any, Dict, Optional
 from urllib.parse import quote
@@ -17,17 +16,13 @@ class Segments:
     def create(cls, params: Dict[str, Any]) -> Any:
         return request(
             "POST",
-            "/segments2",
-            body={
-                "name": params["name"],
-                "audience_id": params["audience_id"],
-                "filter": params["filter"],
-            },
+            "/segments",
+            body={"name": params["name"], "filter": params["filter"]},
         )
 
     @classmethod
     def get(cls, segment_id: str) -> Any:
-        return request("GET", f"/segments2/{_q(segment_id)}")
+        return request("GET", f"/segments/{_q(segment_id)}")
 
     @classmethod
     def list(
@@ -36,13 +31,13 @@ class Segments:
         after: Optional[str] = None,
         before: Optional[str] = None,
     ) -> Any:
-        return request("GET", "/segments2", query=list_query(limit, after, before))
+        return request("GET", "/segments", query=list_query(limit, after, before))
 
     @classmethod
     def update(cls, segment_id: str, params: Dict[str, Any]) -> Any:
         body = {k: params[k] for k in ("name", "filter") if k in params}
-        return request("PATCH", f"/segments2/{_q(segment_id)}", body=body)
+        return request("PATCH", f"/segments/{_q(segment_id)}", body=body)
 
     @classmethod
     def remove(cls, segment_id: str) -> Any:
-        return request("DELETE", f"/segments2/{_q(segment_id)}")
+        return request("DELETE", f"/segments/{_q(segment_id)}")
