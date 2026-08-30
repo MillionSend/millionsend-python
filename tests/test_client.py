@@ -60,6 +60,29 @@ def test_base_url_default_and_trailing_slash(monkeypatch):
     assert seen["url"] == "https://api.test/emails/e1"
 
 
+def test_refuses_non_loopback_http_unless_allowed(http, monkeypatch):
+    monkeypatch.setattr(millionsend, "allow_insecure_http", False)
+    for base in ("http://mail.example.com", "http://mail.example.com/"):
+        monkeypatch.setattr(millionsend, "base_url", base)
+        with pytest.raises(MillionSendError, match="allow_insecure_http"):
+            millionsend.Emails.get("e1")
+    assert http.calls == []
+
+    monkeypatch.setattr(millionsend, "base_url", None)
+    monkeypatch.setenv("MILLIONSEND_BASE_URL", "http://mail.example.com")
+    with pytest.raises(MillionSendError, match="allow_insecure_http"):
+        millionsend.Emails.get("e1")
+
+    monkeypatch.setattr(millionsend, "allow_insecure_http", True)
+    millionsend.Emails.get("e1")
+    assert http.calls[-1]["url"] == "http://mail.example.com/emails/e1"
+
+    monkeypatch.setattr(millionsend, "allow_insecure_http", False)
+    for base in ("http://localhost:3001", "http://127.0.0.1:3001"):
+        monkeypatch.setattr(millionsend, "base_url", base)
+        millionsend.Emails.get("e1")
+
+
 def test_auth_accept_user_agent_and_content_type(http):
     millionsend.Emails.send({"from": "a@x.dev", "to": "b@x.dev", "subject": "s", "html": "<p>h</p>"})
     h = http.calls[0]["headers"]

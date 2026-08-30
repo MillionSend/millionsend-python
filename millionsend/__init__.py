@@ -45,11 +45,14 @@ from .topics import Topics
 api_key: Optional[str] = os.environ.get("MILLIONSEND_API_KEY")
 base_url: Optional[str] = os.environ.get("MILLIONSEND_BASE_URL")
 timeout: Optional[float] = None
+# Plain http is only accepted for loopback hosts unless this is set.
+allow_insecure_http: bool = False
 
 __all__ = [
     "api_key",
     "base_url",
     "timeout",
+    "allow_insecure_http",
     "Emails",
     "Batch",
     "Contacts",

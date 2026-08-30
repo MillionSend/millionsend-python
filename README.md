@@ -40,10 +40,12 @@ import millionsend
 millionsend.api_key  = "ms_123"                  # or env MILLIONSEND_API_KEY
 millionsend.base_url = "https://mail.acme.dev"   # or env MILLIONSEND_BASE_URL
 millionsend.timeout  = 30                        # optional, seconds (default 60)
+millionsend.allow_insecure_http = False          # accept a non-loopback http:// base_url
 ```
 
 - `api_key` falls back to `MILLIONSEND_API_KEY`. Missing key raises `MissingApiKeyError` on the first call.
 - `base_url` falls back to `MILLIONSEND_BASE_URL`, then `http://localhost:3001`. MillionSend is self-hosted, so **set this to your deployment in production.**
+- Plain `http://` is only accepted for loopback hosts (`localhost`, `127.0.0.1`, `::1`); any other `http://` URL raises `MillionSendError` on the first call, since the API key is sent as a bearer header. Set `millionsend.allow_insecure_http = True` to talk to a non-TLS instance elsewhere (e.g. inside a private network).
 
 Request/response casing: request params are plain dicts in the API's `snake_case` (`reply_to`, `scheduled_at`, `first_name`). Responses are `dict` subclasses that also allow attribute access (`resp.id`, `resp.data[0].id`).
 

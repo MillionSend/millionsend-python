@@ -9,6 +9,7 @@ resource call without re-instantiating anything.
 import json
 import os
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 import requests
 
@@ -19,6 +20,16 @@ DEFAULT_BASE_URL = "http://localhost:3001"
 DEFAULT_TIMEOUT = 60.0
 
 _JSON_METHODS = ("POST", "PATCH")
+_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def is_insecure_http_url(url: str) -> bool:
+    """True for an ``http://`` URL whose host is not loopback."""
+    parts = urlsplit(url)
+    if parts.scheme != "http":
+        return False
+    host = (parts.hostname or "").lower()
+    return host not in _LOOPBACK_HOSTS and not host.startswith("127.")
 
 
 class Response(dict):
@@ -59,7 +70,16 @@ def _api_key() -> str:
 
 def _base_url() -> str:
     base = _config("base_url") or os.environ.get("MILLIONSEND_BASE_URL") or DEFAULT_BASE_URL
-    return base.rstrip("/")
+    base = base.rstrip("/")
+    # The API key travels as a bearer header, so plain http is loopback-only by default.
+    if not _config("allow_insecure_http") and is_insecure_http_url(base):
+        raise MillionSendError(
+            f"Refusing to send the API key over plain http to {base}. "
+            "Use https, or set millionsend.allow_insecure_http = True.",
+            code="application_error",
+            status_code=None,
+        )
+    return base
 
 
 def list_query(
