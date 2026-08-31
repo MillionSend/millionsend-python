@@ -15,7 +15,7 @@ import requests
 
 from .errors import MillionSendError, MissingApiKeyError, raise_api_error
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 DEFAULT_BASE_URL = "http://localhost:3001"
 DEFAULT_TIMEOUT = 60.0
 

@@ -75,7 +75,8 @@ Subclasses: `ValidationError`, `NotFoundError`, `RestrictedApiKeyError`, `Sendin
 
 ```python
 millionsend.Emails.send(payload, idempotency_key="order-42")  # POST /emails
-millionsend.Emails.get(email_id)                              # GET /emails/{id}
+millionsend.Emails.get(email_id)                              # GET /emails/{id} (includes a nullable 0-10 `score`)
+millionsend.Emails.get_insights(email_id)                     # GET /emails/{id}/insights (404 until computed)
 millionsend.Emails.cancel(email_id)                           # POST /emails/{id}/cancel (scheduled only)
 millionsend.Batch.send([payload_a, payload_b], idempotency_key="batch-1")  # up to 100
 ```
@@ -150,6 +151,20 @@ millionsend.Segments.get(segment.id)   # includes a live contact_count
 millionsend.Segments.list()
 millionsend.Segments.update(segment.id, {"name": "Pro tier"})
 millionsend.Segments.remove(segment.id)
+```
+
+### Deliverability (MillionSend extension)
+
+Per-email best-practice insights and an account-level deliverability score — no Resend equivalent.
+
+```python
+insights = millionsend.Emails.get_insights(email.id)  # raises NotFoundError until computed
+print(insights.score, insights.band)                  # 8.5 "excellent"
+for check in insights.checks:
+    print(check.id, check.status, check.penalty)
+
+account = millionsend.Deliverability.get()            # trailing-30-day account score
+print(account.score, account.band, account.guardrail_status)  # scores are None until enough data
 ```
 
 ## Migrating from Resend

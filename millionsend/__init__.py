@@ -26,6 +26,7 @@ from ._client import VERSION as __version__
 from ._client import Response
 from .broadcasts import Broadcasts
 from .contacts import Contacts
+from .deliverability import Deliverability
 from .emails import Batch, Emails
 from .errors import (
     ApplicationError,
@@ -59,6 +60,7 @@ __all__ = [
     "Topics",
     "Broadcasts",
     "Segments",
+    "Deliverability",
     "Response",
     "MillionSendError",
     "MissingApiKeyError",

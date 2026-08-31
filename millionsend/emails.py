@@ -18,6 +18,11 @@ class Emails:
         return request("GET", f"/emails/{quote(str(email_id), safe='')}")
 
     @classmethod
+    def get_insights(cls, email_id: str) -> Any:
+        """GET /emails/{id}/insights — 404 until insights exist for the email."""
+        return request("GET", f"/emails/{quote(str(email_id), safe='')}/insights")
+
+    @classmethod
     def cancel(cls, email_id: str) -> Any:
         """POST /emails/{id}/cancel — scheduled, unsent emails only."""
         return request("POST", f"/emails/{quote(str(email_id), safe='')}/cancel")

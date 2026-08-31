@@ -2,6 +2,8 @@
 
 from urllib.parse import quote
 
+import pytest
+
 import millionsend
 
 
@@ -13,6 +15,109 @@ def test_emails_get_and_cancel(http):
     millionsend.Emails.cancel("e1")
     assert http.calls[1]["method"] == "POST"
     assert http.calls[1]["path"] == "/emails/e1/cancel"
+
+
+def test_emails_get_score_present_and_null(http):
+    http.body = {"object": "email", "id": "e1", "score": 8.5}
+    assert millionsend.Emails.get("e1").score == 8.5
+
+    http.body = {"object": "email", "id": "e1", "score": None}
+    assert millionsend.Emails.get("e1").score is None
+
+
+def test_emails_get_insights_full_shape(http):
+    http.body = {
+        "object": "email_insights",
+        "email_id": "e1",
+        "score": 8.5,
+        "score_version": 1,
+        "band": "excellent",
+        "marketing": True,
+        "html_size_bytes": 12345,
+        "computed_at": "2026-08-31T00:00:00Z",
+        "checks": [
+            {
+                "id": "list_unsubscribe",
+                "severity": "major",
+                "status": "fail",
+                "penalty": 1.25,
+                "detail": {"reason": "missing header"},
+            },
+            {"id": "plain_text_part", "severity": "minor", "status": "pass", "penalty": 0},
+        ],
+    }
+    res = millionsend.Emails.get_insights("e1")
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == "/emails/e1/insights"
+    assert res.object == "email_insights"
+    assert res.email_id == "e1"
+    assert res.score == 8.5
+    assert res.score_version == 1
+    assert res.band == "excellent"
+    assert res.marketing is True
+    assert res.html_size_bytes == 12345
+    assert res.computed_at == "2026-08-31T00:00:00Z"
+    assert res.checks[0].id == "list_unsubscribe"
+    assert res.checks[0].severity == "major"
+    assert res.checks[0].status == "fail"
+    assert res.checks[0].penalty == 1.25
+    assert res.checks[0].detail.reason == "missing header"
+    assert "detail" not in res.checks[1]
+    # open enums: unknown future band/status values pass through untouched
+    http.body = {
+        "object": "email_insights",
+        "band": "stellar",
+        "checks": [{"id": "new_check_v9", "severity": "info", "status": "deferred", "penalty": 0}],
+    }
+    res = millionsend.Emails.get_insights("e1")
+    assert res.band == "stellar"
+    assert res.checks[0].status == "deferred"
+
+
+def test_emails_get_insights_404(http):
+    http.status = 404
+    http.body = {"statusCode": 404, "name": "not_found", "message": "no insights"}
+    with pytest.raises(millionsend.NotFoundError):
+        millionsend.Emails.get_insights("e1")
+
+
+def test_deliverability_get(http):
+    http.body = {
+        "object": "deliverability",
+        "score": 8.7,
+        "band": "good",
+        "content_score": 8.2,
+        "outcome_score": 9.1,
+        "complaint_rate": 0.0002,
+        "hard_bounce_rate": 0.001,
+        "emails_sent": 12345,
+        "scored_recipients": 23456,
+        "window_days": 30,
+        "insufficient_outcome_data": False,
+        "guardrail_status": "ok",
+        "score_version": 1,
+    }
+    res = millionsend.Deliverability.get()
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == "/deliverability"
+    assert res.score == 8.7
+    assert res.band == "good"
+    assert res.content_score == 8.2
+    assert res.outcome_score == 9.1
+    assert res.complaint_rate == 0.0002
+    assert res.hard_bounce_rate == 0.001
+    assert res.emails_sent == 12345
+    assert res.scored_recipients == 23456
+    assert res.window_days == 30
+    assert res.insufficient_outcome_data is False
+    assert res.guardrail_status == "ok"
+    assert res.score_version == 1
+
+    http.body = {"object": "deliverability", "score": None, "band": None, "guardrail_status": "paused"}
+    res = millionsend.Deliverability.get()
+    assert res.score is None
+    assert res.band is None
+    assert res.guardrail_status == "paused"
 
 
 def test_emails_send_body_passthrough(http):
