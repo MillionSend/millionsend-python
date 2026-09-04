@@ -2,13 +2,8 @@
 extension, no Resend equivalent). ``get`` returns a live ``contact_count``."""
 
 from typing import Any, Dict, Optional
-from urllib.parse import quote
 
-from ._client import list_query, request
-
-
-def _q(value: Any) -> str:
-    return quote(str(value), safe="")
+from ._client import list_query, path_id, request
 
 
 class Segments:
@@ -22,7 +17,7 @@ class Segments:
 
     @classmethod
     def get(cls, segment_id: str) -> Any:
-        return request("GET", f"/segments/{_q(segment_id)}")
+        return request("GET", f"/segments/{path_id(segment_id)}")
 
     @classmethod
     def list(
@@ -36,8 +31,8 @@ class Segments:
     @classmethod
     def update(cls, segment_id: str, params: Dict[str, Any]) -> Any:
         body = {k: params[k] for k in ("name", "filter") if k in params}
-        return request("PATCH", f"/segments/{_q(segment_id)}", body=body)
+        return request("PATCH", f"/segments/{path_id(segment_id)}", body=body)
 
     @classmethod
     def remove(cls, segment_id: str) -> Any:
-        return request("DELETE", f"/segments/{_q(segment_id)}")
+        return request("DELETE", f"/segments/{path_id(segment_id)}")

@@ -24,22 +24,40 @@ from typing import Optional
 
 from ._client import VERSION as __version__
 from ._client import Response
+from .api_keys import ApiKeys
 from .broadcasts import Broadcasts
+from .contact_properties import ContactProperties
 from .contacts import Contacts
 from .deliverability import Deliverability
+from .domains import Domains
 from .emails import Batch, Emails
 from .errors import (
     ApplicationError,
+    ConcurrentIdempotentRequestsError,
+    ConflictError,
+    DailyQuotaExceededError,
+    ForbiddenError,
+    InternalServerError,
+    InvalidApiKeyError,
     InvalidIdempotentRequestError,
+    InvalidParameterError,
+    InvalidPayloadError,
     MillionSendError,
     MissingApiKeyError,
     NotFoundError,
+    PayloadTooLargeError,
+    PlanLimitReachedError,
+    RateLimitExceededError,
     RestrictedApiKeyError,
     SendingPausedError,
     ValidationError,
 )
 from .segments import Segments
+from .suppressions import Suppressions
+from .templates import Templates
 from .topics import Topics
+from .usage import Usage
+from .webhooks import Webhooks
 
 # Module-level config (resend-python style). Env vars seed the defaults; either
 # these globals or the env vars are read at call time.
@@ -57,18 +75,36 @@ __all__ = [
     "Emails",
     "Batch",
     "Contacts",
+    "ContactProperties",
     "Topics",
     "Broadcasts",
     "Segments",
+    "Suppressions",
+    "Domains",
+    "Webhooks",
+    "ApiKeys",
+    "Templates",
+    "Usage",
     "Deliverability",
     "Response",
     "MillionSendError",
     "MissingApiKeyError",
+    "InvalidApiKeyError",
     "ValidationError",
+    "InvalidParameterError",
+    "InvalidPayloadError",
+    "PayloadTooLargeError",
     "NotFoundError",
+    "ConflictError",
+    "ForbiddenError",
     "RestrictedApiKeyError",
     "SendingPausedError",
+    "RateLimitExceededError",
+    "DailyQuotaExceededError",
+    "PlanLimitReachedError",
     "InvalidIdempotentRequestError",
+    "ConcurrentIdempotentRequestsError",
+    "InternalServerError",
     "ApplicationError",
     "__version__",
 ]

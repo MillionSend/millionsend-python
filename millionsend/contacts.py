@@ -4,28 +4,74 @@ Params are already snake_case (the wire casing). ``None`` in an update clears a
 field; omit the key to leave it unchanged.
 """
 
-from typing import Any, Dict, Optional
-from urllib.parse import quote
+from typing import Any, Dict, List, Optional
 
-from ._client import list_query, request
+from ._client import Options, list_query, path_id, request, request_options
 
 
 def _key(contact_id: Optional[str], email: Optional[str]) -> str:
     value = email if email is not None else (contact_id if contact_id is not None else "")
-    return quote(str(value), safe="")
+    return path_id(value)
+
+
+def _params_key(params: Dict[str, Any]) -> str:
+    """resend-python addresses a contact by ``id`` (or ``contact_id``) or ``email``."""
+    return _key(params.get("contact_id", params.get("id")), params.get("email"))
 
 
 class ContactTopics:
     @classmethod
     def update(cls, params: Dict[str, Any]) -> Any:
         """PATCH /contacts/{idOrEmail}/topics — body is the bare topics array."""
-        key = _key(params.get("id"), params.get("email"))
-        return request("PATCH", f"/contacts/{key}/topics", body=params["topics"])
+        return request("PATCH", f"/contacts/{_params_key(params)}/topics", body=params["topics"])
+
+
+class ContactSegments:
+    @classmethod
+    def add(cls, params: Dict[str, Any]) -> Any:
+        """POST /contacts/{idOrEmail}/segments/{segmentId}"""
+        return request("POST", cls._path(params))
+
+    @classmethod
+    def remove(cls, params: Dict[str, Any]) -> Any:
+        """DELETE /contacts/{idOrEmail}/segments/{segmentId}"""
+        return request("DELETE", cls._path(params))
+
+    @staticmethod
+    def _path(params: Dict[str, Any]) -> str:
+        return f"/contacts/{_params_key(params)}/segments/{path_id(params['segment_id'])}"
+
+
+class ContactBatch:
+    @classmethod
+    def create(
+        cls,
+        params: List[Dict[str, Any]],
+        options: Options = None,
+        on_conflict: Optional[str] = None,
+        batch_validation: Optional[str] = None,
+    ) -> Any:
+        """POST /contacts/batch — 1..1000 contacts (MillionSend extension).
+
+        ``on_conflict`` is ``"error"`` (default), ``"skip"`` or ``"upsert"`` for an
+        email that already belongs to a contact. ``batch_validation`` is
+        ``"strict"`` (default) or ``"permissive"`` (failures listed in ``errors``).
+        """
+        query = {"on_conflict": on_conflict} if on_conflict is not None else None
+        return request(
+            "POST",
+            "/contacts/batch",
+            body=params,
+            query=query,
+            **request_options(options, batch_validation=batch_validation),
+        )
 
 
 class Contacts:
-    # Mirrors Resend's ``contacts.topics.update`` nesting: Contacts.Topics.update(...).
+    # Mirrors Resend's nesting: Contacts.Topics.update(...), Contacts.Segments.add(...).
     Topics = ContactTopics
+    Segments = ContactSegments
+    Batch = ContactBatch
 
     @classmethod
     def create(cls, params: Dict[str, Any]) -> Any:
@@ -52,5 +98,10 @@ class Contacts:
         limit: Optional[int] = None,
         after: Optional[str] = None,
         before: Optional[str] = None,
+        segment_id: Optional[str] = None,
     ) -> Any:
-        return request("GET", "/contacts", query=list_query(limit, after, before))
+        """GET /contacts, or GET /segments/{segment_id}/contacts when ``segment_id`` is given."""
+        query = list_query(limit, after, before) or {}
+        segment_id = query.pop("segment_id", segment_id)
+        path = f"/segments/{path_id(segment_id)}/contacts" if segment_id else "/contacts"
+        return request("GET", path, query=query or None)

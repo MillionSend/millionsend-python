@@ -276,3 +276,399 @@ def test_segments_crud(http):
 
     millionsend.Segments.remove("s1")
     assert http.calls[4]["method"] == "DELETE"
+
+
+FULL_EMAIL = {
+    "from": "Acme <a@x.dev>",
+    "to": ["b@x.dev", "c@x.dev"],
+    "subject": "s",
+    "html": "<p>h</p>",
+    "text": "t",
+    "cc": ["cc@x.dev"],
+    "bcc": "bcc@x.dev",
+    "reply_to": ["r@x.dev"],
+    "scheduled_at": "2999-01-01T00:00:00Z",
+    "tags": [{"name": "category", "value": "welcome"}],
+    "topic_id": "6f1d2c3e-0000-4000-8000-000000000001",
+    "attachments": [
+        {
+            "filename": "hello.txt",
+            "content": "aGVsbG8=",
+            "content_type": "text/plain",
+            "content_id": "hello-cid",
+            "path": "https://x.dev/hello.txt",
+        }
+    ],
+    "headers": {"X-Entity-Ref-ID": "123"},
+    "template": {"id": "tpl_1", "variables": {"name": "Ada"}},
+}
+
+
+def test_emails_send_full_wire_body(http):
+    millionsend.Emails.send(FULL_EMAIL)
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/emails"
+    assert http.calls[0]["body"] == FULL_EMAIL
+
+    cleared = dict(FULL_EMAIL, topic_id=None)
+    millionsend.Batch.send([FULL_EMAIL, cleared])
+    assert http.calls[1]["path"] == "/emails/batch"
+    assert http.calls[1]["body"] == [FULL_EMAIL, cleared]
+
+
+def test_batch_send_permissive_validation_and_typed_errors(http):
+    http.body = {
+        "data": [{"id": "1"}],
+        "errors": [{"index": 1, "message": "emails.1: to is required"}],
+    }
+    res = millionsend.Batch.send(
+        [
+            {"from": "a@x.dev", "to": "b@x.dev", "subject": "1", "text": "one"},
+            {"from": "a@x.dev", "subject": "2", "text": "two"},
+        ],
+        {"batch_validation": "permissive", "idempotency_key": "batch-2"},
+    )
+    assert http.calls[0]["headers"]["x-batch-validation"] == "permissive"
+    assert http.calls[0]["headers"]["Idempotency-Key"] == "batch-2"
+    assert res.data[0].id == "1"
+    assert res.errors[0].index == 1
+    assert res.errors[0].message == "emails.1: to is required"
+
+
+def test_emails_list_update_remove(http):
+    millionsend.Emails.list(limit=10, after="cur")
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == "/emails"
+    assert http.calls[0]["params"] == {"limit": 10, "after": "cur"}
+
+    millionsend.Emails.update({"id": "e1", "scheduled_at": "2999-01-01T00:00:00Z"})
+    assert http.calls[1]["method"] == "PATCH"
+    assert http.calls[1]["path"] == "/emails/e1"
+    assert http.calls[1]["body"] == {"scheduled_at": "2999-01-01T00:00:00Z"}
+
+    millionsend.Emails.remove("e1")
+    assert http.calls[2]["method"] == "DELETE"
+    assert http.calls[2]["path"] == "/emails/e1"
+
+
+def test_update_without_id_raises_before_any_request(http):
+    with pytest.raises(ValueError):
+        millionsend.Templates.update({"name": "x"})
+    with pytest.raises(ValueError):
+        millionsend.Webhooks.update({"webhook_id": None, "status": "disabled"})
+    assert http.calls == []
+
+
+def test_contacts_create_full_body(http):
+    params = {
+        "email": "c@x.dev",
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+        "unsubscribed": False,
+        "properties": {"plan": "pro", "seats": 3},
+        "segments": [{"id": "s1"}],
+        "topics": [{"id": "t1", "subscription": "opt_in"}],
+    }
+    millionsend.Contacts.create(params)
+    assert http.calls[0]["body"] == params
+
+
+def test_contacts_update_null_clears_names_and_properties(http):
+    millionsend.Contacts.update(
+        {"email": "c@x.dev", "first_name": None, "last_name": None, "properties": {"plan": None}}
+    )
+    assert http.calls[0]["path"] == "/contacts/" + quote("c@x.dev", safe="")
+    assert http.calls[0]["body"] == {"first_name": None, "last_name": None, "properties": {"plan": None}}
+
+
+def test_contacts_batch_create(http):
+    http.body = {
+        "data": [{"object": "contact", "index": 0, "id": "c1", "status": "created"}],
+        "counts": {"created": 1, "updated": 0, "skipped": 0, "failed": 1},
+        "errors": [{"index": 1, "message": "contacts.1: email is required"}],
+    }
+    items = [{"email": "a@x.dev", "first_name": "A"}, {"first_name": "no-email"}]
+    res = millionsend.Contacts.Batch.create(items, on_conflict="upsert", batch_validation="permissive")
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/contacts/batch"
+    assert http.calls[0]["params"] == {"on_conflict": "upsert"}
+    assert http.calls[0]["headers"]["x-batch-validation"] == "permissive"
+    assert http.calls[0]["body"] == items
+    assert res.data[0].status == "created"
+    assert res.counts.failed == 1
+    assert res.errors[0].index == 1
+
+    millionsend.Contacts.Batch.create(items)
+    assert http.calls[1]["params"] is None
+    assert "x-batch-validation" not in http.calls[1]["headers"]
+
+    millionsend.Contacts.Batch.create(items, {"batch_validation": "strict"}, on_conflict="skip")
+    assert http.calls[2]["params"] == {"on_conflict": "skip"}
+    assert http.calls[2]["headers"]["x-batch-validation"] == "strict"
+
+
+def test_contacts_segments_add_remove(http):
+    millionsend.Contacts.Segments.add({"contact_id": "c1", "segment_id": "s1"})
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/contacts/c1/segments/s1"
+    assert http.calls[0]["body"] is None
+
+    millionsend.Contacts.Segments.add({"id": "c1", "segment_id": "s1"})
+    assert http.calls[1]["path"] == "/contacts/c1/segments/s1"
+
+    millionsend.Contacts.Segments.remove({"email": "c@x.dev", "segment_id": "s1"})
+    assert http.calls[2]["method"] == "DELETE"
+    assert http.calls[2]["path"] == "/contacts/" + quote("c@x.dev", safe="") + "/segments/s1"
+
+
+def test_contacts_list_by_segment(http):
+    millionsend.Contacts.list(segment_id="s1", limit=5)
+    assert http.calls[0]["path"] == "/segments/s1/contacts"
+    assert http.calls[0]["params"] == {"limit": 5}
+
+    millionsend.Contacts.list({"segment_id": "s1"})
+    assert http.calls[1]["path"] == "/segments/s1/contacts"
+    assert http.calls[1]["params"] is None
+
+    millionsend.Contacts.list()
+    assert http.calls[2]["path"] == "/contacts"
+    assert http.calls[2]["params"] is None
+
+
+def test_topics_update(http):
+    millionsend.Topics.update("t1", {"name": "Renamed", "description": "d", "visibility": "public"})
+    assert http.calls[0]["method"] == "PATCH"
+    assert http.calls[0]["path"] == "/topics/t1"
+    assert http.calls[0]["body"] == {"name": "Renamed", "description": "d", "visibility": "public"}
+
+
+def test_broadcasts_full_body_and_null_clears_topic(http):
+    params = {
+        "name": "September",
+        "segment_id": "s1",
+        "from": "Acme <news@x.dev>",
+        "subject": "News",
+        "html": "<p>hi</p>",
+        "text": "hi",
+        "reply_to": ["r@x.dev"],
+        "preview_text": "preheader",
+        "topic_id": "t1",
+        "send": True,
+        "scheduled_at": "in 1 hour",
+    }
+    millionsend.Broadcasts.create(params)
+    assert http.calls[0]["body"] == params
+
+    millionsend.Broadcasts.update("b1", {"topic_id": None, "preview_text": "new"})
+    assert http.calls[1]["body"] == {"topic_id": None, "preview_text": "new"}
+
+
+def test_suppressions(http):
+    millionsend.Suppressions.add({"email": "s@x.dev", "origin": "manual"})
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/suppressions"
+    assert http.calls[0]["body"] == {"email": "s@x.dev", "origin": "manual"}
+
+    millionsend.Suppressions.create({"email": "s@x.dev"})
+    assert http.calls[1]["path"] == "/suppressions"
+    assert http.calls[1]["body"] == {"email": "s@x.dev"}
+
+    millionsend.Suppressions.get("s@x.dev")
+    assert http.calls[2]["method"] == "GET"
+    assert http.calls[2]["path"] == "/suppressions/" + quote("s@x.dev", safe="")
+
+    millionsend.Suppressions.list(limit=10, origin="bounce")
+    assert http.calls[3]["path"] == "/suppressions"
+    assert http.calls[3]["params"] == {"limit": 10, "origin": "bounce"}
+
+    millionsend.Suppressions.list()
+    assert http.calls[4]["params"] is None
+
+    millionsend.Suppressions.remove("sup_1")
+    assert http.calls[5]["method"] == "DELETE"
+    assert http.calls[5]["path"] == "/suppressions/sup_1"
+
+
+def test_suppressions_batch(http):
+    http.body = {"data": [{"object": "suppression", "id": "sup_1"}]}
+    res = millionsend.Suppressions.Batch.add({"emails": ["a@x.dev", "b@x.dev"], "origin": "unsubscribe"})
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/suppressions/batch/add"
+    assert http.calls[0]["body"] == {"emails": ["a@x.dev", "b@x.dev"], "origin": "unsubscribe"}
+    assert res.data[0].id == "sup_1"
+
+    millionsend.Suppressions.Batch.remove({"ids": ["sup_1"]})
+    assert http.calls[1]["path"] == "/suppressions/batch/remove"
+    assert http.calls[1]["body"] == {"ids": ["sup_1"]}
+
+    millionsend.Suppressions.Batch.remove({"emails": ["a@x.dev"]})
+    assert http.calls[2]["body"] == {"emails": ["a@x.dev"]}
+
+
+def test_domains(http):
+    params = {
+        "name": "acme.dev",
+        "region": "us-east-1",
+        "custom_return_path": "bounce",
+        "open_tracking": True,
+        "click_tracking": False,
+        "tracking_subdomain": "links",
+    }
+    millionsend.Domains.create(params)
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/domains"
+    assert http.calls[0]["body"] == params
+
+    millionsend.Domains.list(limit=5)
+    assert http.calls[1]["method"] == "GET"
+    assert http.calls[1]["path"] == "/domains"
+    assert http.calls[1]["params"] == {"limit": 5}
+
+    millionsend.Domains.get("d1")
+    assert http.calls[2]["path"] == "/domains/d1"
+
+    millionsend.Domains.verify("d1")
+    assert http.calls[3]["method"] == "POST"
+    assert http.calls[3]["path"] == "/domains/d1/verify"
+    assert http.calls[3]["body"] is None
+
+    millionsend.Domains.update(
+        {"id": "d1", "open_tracking": True, "click_tracking": True, "tracking_subdomain": None}
+    )
+    assert http.calls[4]["method"] == "PATCH"
+    assert http.calls[4]["path"] == "/domains/d1"
+    assert http.calls[4]["body"] == {"open_tracking": True, "click_tracking": True, "tracking_subdomain": None}
+
+    millionsend.Domains.remove("d1")
+    assert http.calls[5]["method"] == "DELETE"
+    assert http.calls[5]["path"] == "/domains/d1"
+
+
+def test_webhooks(http):
+    http.body = {"object": "webhook", "id": "w1", "signing_secret": "whsec_abc"}
+    params = {
+        "endpoint": "https://x.dev/hook",
+        "events": ["email.sent", "email.bounced"],
+        "signing_secret": "whsec_abc",
+    }
+    res = millionsend.Webhooks.create(params)
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/webhooks"
+    assert http.calls[0]["body"] == params
+    assert res.signing_secret == "whsec_abc"
+
+    millionsend.Webhooks.list(after="cur")
+    assert http.calls[1]["path"] == "/webhooks"
+    assert http.calls[1]["params"] == {"after": "cur"}
+
+    millionsend.Webhooks.get("w1")
+    assert http.calls[2]["method"] == "GET"
+    assert http.calls[2]["path"] == "/webhooks/w1"
+
+    millionsend.Webhooks.update({"webhook_id": "w1", "status": "disabled"})
+    assert http.calls[3]["method"] == "PATCH"
+    assert http.calls[3]["path"] == "/webhooks/w1"
+    assert http.calls[3]["body"] == {"status": "disabled"}
+
+    millionsend.Webhooks.update({"id": "w1", "endpoint": "https://x.dev/h2", "events": ["email.opened"]})
+    assert http.calls[4]["path"] == "/webhooks/w1"
+    assert http.calls[4]["body"] == {"endpoint": "https://x.dev/h2", "events": ["email.opened"]}
+
+    millionsend.Webhooks.remove("w1")
+    assert http.calls[5]["method"] == "DELETE"
+    assert http.calls[5]["path"] == "/webhooks/w1"
+
+
+def test_api_keys(http):
+    http.body = {"id": "k1", "token": "ms_secret"}
+    res = millionsend.ApiKeys.create({"name": "ci", "permission": "sending_access", "domain_id": "d1"})
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/api-keys"
+    assert http.calls[0]["body"] == {"name": "ci", "permission": "sending_access", "domain_id": "d1"}
+    assert res.token == "ms_secret"
+
+    millionsend.ApiKeys.list(limit=100)
+    assert http.calls[1]["method"] == "GET"
+    assert http.calls[1]["path"] == "/api-keys"
+    assert http.calls[1]["params"] == {"limit": 100}
+
+    millionsend.ApiKeys.remove("k1")
+    assert http.calls[2]["method"] == "DELETE"
+    assert http.calls[2]["path"] == "/api-keys/k1"
+
+
+def test_templates(http):
+    params = {"name": "Welcome", "html": "<p>{{{NAME}}}</p>", "subject": "Hi", "text": "hi", "alias": "welcome-v1"}
+    millionsend.Templates.create(params)
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/templates"
+    assert http.calls[0]["body"] == params
+
+    millionsend.Templates.get("welcome-v1")
+    assert http.calls[1]["method"] == "GET"
+    assert http.calls[1]["path"] == "/templates/welcome-v1"
+
+    millionsend.Templates.list(before="cur")
+    assert http.calls[2]["path"] == "/templates"
+    assert http.calls[2]["params"] == {"before": "cur"}
+
+    millionsend.Templates.update(
+        {"id": "welcome-v1", "alias": None, "subject": None, "text": None, "html": "<p>x</p>"}
+    )
+    assert http.calls[3]["method"] == "PATCH"
+    assert http.calls[3]["path"] == "/templates/welcome-v1"
+    assert http.calls[3]["body"] == {"alias": None, "subject": None, "text": None, "html": "<p>x</p>"}
+
+    millionsend.Templates.publish("tpl_1")
+    assert http.calls[4]["method"] == "POST"
+    assert http.calls[4]["path"] == "/templates/tpl_1/publish"
+
+    millionsend.Templates.duplicate("tpl_1")
+    assert http.calls[5]["method"] == "POST"
+    assert http.calls[5]["path"] == "/templates/tpl_1/duplicate"
+
+    millionsend.Templates.remove("tpl_1")
+    assert http.calls[6]["method"] == "DELETE"
+    assert http.calls[6]["path"] == "/templates/tpl_1"
+
+
+def test_contact_properties(http):
+    millionsend.ContactProperties.create({"key": "plan", "type": "string", "fallback_value": "free"})
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/contact-properties"
+    assert http.calls[0]["body"] == {"key": "plan", "type": "string", "fallback_value": "free"}
+
+    millionsend.ContactProperties.list(limit=20)
+    assert http.calls[1]["method"] == "GET"
+    assert http.calls[1]["path"] == "/contact-properties"
+    assert http.calls[1]["params"] == {"limit": 20}
+
+    millionsend.ContactProperties.get("p1")
+    assert http.calls[2]["path"] == "/contact-properties/p1"
+
+    millionsend.ContactProperties.update({"id": "p1", "fallback_value": None})
+    assert http.calls[3]["method"] == "PATCH"
+    assert http.calls[3]["path"] == "/contact-properties/p1"
+    assert http.calls[3]["body"] == {"fallback_value": None}
+
+    millionsend.ContactProperties.remove("p1")
+    assert http.calls[4]["method"] == "DELETE"
+    assert http.calls[4]["path"] == "/contact-properties/p1"
+
+
+def test_usage_get(http):
+    http.body = {
+        "object": "usage",
+        "cloud": True,
+        "plan": "pro",
+        "limits": {"emails_per_day": 10000, "domains": 10},
+        "today": {"emails_sent": 12, "resets_at": "2026-09-05T00:00:00Z"},
+        "team": {"id": "team_1", "name": "Acme"},
+        "app_url": None,
+    }
+    res = millionsend.Usage.get()
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == "/usage"
+    assert res.limits.emails_per_day == 10000
+    assert res.today.emails_sent == 12
+    assert res.app_url is None

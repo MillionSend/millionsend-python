@@ -2,9 +2,8 @@
 ``{"data": [...]}`` (unpaginated)."""
 
 from typing import Any, Dict
-from urllib.parse import quote
 
-from ._client import request
+from ._client import path_id, request
 
 
 class Topics:
@@ -14,12 +13,17 @@ class Topics:
 
     @classmethod
     def get(cls, topic_id: str) -> Any:
-        return request("GET", f"/topics/{quote(str(topic_id), safe='')}")
+        return request("GET", f"/topics/{path_id(topic_id)}")
 
     @classmethod
     def list(cls) -> Any:
         return request("GET", "/topics")
 
     @classmethod
+    def update(cls, topic_id: str, params: Dict[str, Any]) -> Any:
+        """PATCH /topics/{id} — name, description, visibility."""
+        return request("PATCH", f"/topics/{path_id(topic_id)}", body=params)
+
+    @classmethod
     def remove(cls, topic_id: str) -> Any:
-        return request("DELETE", f"/topics/{quote(str(topic_id), safe='')}")
+        return request("DELETE", f"/topics/{path_id(topic_id)}")

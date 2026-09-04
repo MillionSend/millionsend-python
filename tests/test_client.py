@@ -149,3 +149,77 @@ def test_transport_failure_has_status_code_none(http):
     assert "ECONNREFUSED" in ei.value.message
     # transport failures are the base error, never a typed API subclass
     assert type(ei.value) is MillionSendError
+
+
+def test_options_dict_resend_shape_and_positional_string(http):
+    params = {"from": "a@x.dev", "to": "b@x.dev", "subject": "s", "text": "t"}
+    millionsend.Emails.send(params, {"idempotency_key": "dict-key"})
+    assert http.calls[0]["headers"]["Idempotency-Key"] == "dict-key"
+
+    millionsend.Emails.send(params, "positional-key")
+    assert http.calls[1]["headers"]["Idempotency-Key"] == "positional-key"
+
+    millionsend.Emails.send(params, {"idempotency_key": "dict-key"}, idempotency_key="kw-key")
+    assert http.calls[2]["headers"]["Idempotency-Key"] == "kw-key"
+
+    millionsend.Emails.send(params)
+    assert "Idempotency-Key" not in http.calls[3]["headers"]
+    assert "x-batch-validation" not in http.calls[3]["headers"]
+
+
+def test_batch_validation_header_post_only(http):
+    items = [{"from": "a@x.dev", "to": "b@x.dev", "subject": "s", "text": "t"}]
+    millionsend.Batch.send(items, batch_validation="permissive")
+    assert http.calls[0]["headers"]["x-batch-validation"] == "permissive"
+    assert "Idempotency-Key" not in http.calls[0]["headers"]
+
+    millionsend.Batch.send(items, {"batch_validation": "strict", "idempotency_key": "b-1"})
+    assert http.calls[1]["headers"]["x-batch-validation"] == "strict"
+    assert http.calls[1]["headers"]["Idempotency-Key"] == "b-1"
+
+    millionsend.Batch.send(items)
+    assert "x-batch-validation" not in http.calls[2]["headers"]
+
+    _client.request("GET", "/emails", idempotency_key="k", batch_validation="permissive")
+    assert "x-batch-validation" not in http.calls[3]["headers"]
+    assert "Idempotency-Key" not in http.calls[3]["headers"]
+
+
+def test_list_accepts_resend_params_dict(http):
+    millionsend.Domains.list({"limit": 5, "after": "cur"})
+    assert http.calls[0]["params"] == {"limit": 5, "after": "cur"}
+
+    millionsend.Suppressions.list({"origin": "bounce", "before": None})
+    assert http.calls[1]["params"] == {"origin": "bounce"}
+
+    millionsend.Domains.list({})
+    assert http.calls[2]["params"] is None
+
+
+def test_every_api_error_name_maps_to_a_subclass(http):
+    cases = {
+        "missing_api_key": (401, millionsend.MissingApiKeyError),
+        "invalid_api_key": (401, millionsend.InvalidApiKeyError),
+        "restricted_api_key": (403, millionsend.RestrictedApiKeyError),
+        "forbidden": (403, millionsend.ForbiddenError),
+        "invalid_parameter": (400, millionsend.InvalidParameterError),
+        "invalid_payload": (400, millionsend.InvalidPayloadError),
+        "payload_too_large": (413, millionsend.PayloadTooLargeError),
+        "conflict": (409, millionsend.ConflictError),
+        "concurrent_idempotent_requests": (409, millionsend.ConcurrentIdempotentRequestsError),
+        "invalid_idempotent_request": (409, millionsend.InvalidIdempotentRequestError),
+        "rate_limit_exceeded": (429, millionsend.RateLimitExceededError),
+        "daily_quota_exceeded": (429, millionsend.DailyQuotaExceededError),
+        "plan_limit_reached": (402, millionsend.PlanLimitReachedError),
+        "sending_paused": (403, millionsend.SendingPausedError),
+        "internal_server_error": (500, millionsend.InternalServerError),
+        "application_error": (500, millionsend.ApplicationError),
+    }
+    for name, (status, cls) in cases.items():
+        http.status = status
+        http.body = {"statusCode": status, "name": name, "message": name}
+        with pytest.raises(cls) as ei:
+            millionsend.Emails.get("e1")
+        assert ei.value.code == name
+        assert ei.value.status_code == status
+        assert isinstance(ei.value, MillionSendError)

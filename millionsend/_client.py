@@ -8,19 +8,23 @@ resource call without re-instantiating anything.
 
 import json
 import os
-from typing import Any, Dict, Optional
-from urllib.parse import urlsplit
+from typing import Any, Dict, Optional, Tuple, Union
+from urllib.parse import quote, urlsplit
 
 import requests
 
 from .errors import MillionSendError, MissingApiKeyError, raise_api_error
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 DEFAULT_BASE_URL = "http://localhost:3001"
 DEFAULT_TIMEOUT = 60.0
 
 _JSON_METHODS = ("POST", "PATCH")
 _LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+# resend-python's per-request options dict; a bare string is the positional
+# idempotency key accepted by earlier releases.
+Options = Union[str, Dict[str, Any], None]
 
 
 def is_insecure_http_url(url: str) -> bool:
@@ -82,20 +86,59 @@ def _base_url() -> str:
     return base
 
 
+def path_id(value: Any) -> str:
+    """Percent-encode one path segment (ids, emails, aliases)."""
+    return quote(str(value), safe="")
+
+
+def split_id(params: Dict[str, Any], *keys: str) -> Tuple[str, Dict[str, Any]]:
+    """Pop the target id out of a resend-python style ``{"id": ..., **fields}`` dict.
+
+    Every key in ``keys`` is removed from the body; the first one with a value is the id.
+    """
+    body = dict(params)
+    found = [body.pop(key) for key in keys if key in body]
+    ident = next((value for value in found if value is not None), None)
+    if ident is None:
+        raise ValueError(f"params must include one of: {', '.join(keys)}")
+    return path_id(ident), body
+
+
 def list_query(
-    limit: Optional[int] = None,
+    limit: Union[int, Dict[str, Any], None] = None,
     after: Optional[str] = None,
     before: Optional[str] = None,
+    **extra: Any,
 ) -> Optional[Dict[str, Any]]:
-    """Flatten keyset list options into a query map (None values dropped)."""
-    query: Dict[str, Any] = {}
-    if limit is not None:
-        query["limit"] = limit
-    if after is not None:
-        query["after"] = after
-    if before is not None:
-        query["before"] = before
+    """Flatten keyset list options into a query map (None values dropped).
+
+    ``limit`` may instead be the whole options dict — resend-python's
+    ``list({"limit": 10, "after": ...})`` shape.
+    """
+    if isinstance(limit, dict):
+        query: Dict[str, Any] = dict(limit)
+    else:
+        query = {"limit": limit, "after": after, "before": before}
+    query.update({k: v for k, v in extra.items() if v is not None})
+    query = {k: v for k, v in query.items() if v is not None}
     return query or None
+
+
+def request_options(
+    options: Options = None,
+    idempotency_key: Optional[str] = None,
+    batch_validation: Optional[str] = None,
+) -> Dict[str, Optional[str]]:
+    """Merge the options dict with the explicit keywords (keywords win)."""
+    merged = {"idempotency_key": options} if isinstance(options, str) else dict(options or {})
+    if idempotency_key is not None:
+        merged["idempotency_key"] = idempotency_key
+    if batch_validation is not None:
+        merged["batch_validation"] = batch_validation
+    return {
+        "idempotency_key": merged.get("idempotency_key"),
+        "batch_validation": merged.get("batch_validation"),
+    }
 
 
 def request(
@@ -105,6 +148,7 @@ def request(
     body: Any = None,
     query: Optional[Dict[str, Any]] = None,
     idempotency_key: Optional[str] = None,
+    batch_validation: Optional[str] = None,
 ) -> Any:
     """Dispatch one request and return the wrapped JSON body, or raise on error."""
     url = _base_url() + path
@@ -117,9 +161,11 @@ def request(
     if body is not None and method in _JSON_METHODS:
         headers["Content-Type"] = "application/json"
         data = json.dumps(body)
-    # Idempotency is POST-only on the wire; sending it elsewhere is a no-op.
+    # Idempotency and batch validation are POST-only on the wire; sending them elsewhere is a no-op.
     if idempotency_key and method == "POST":
         headers["Idempotency-Key"] = idempotency_key
+    if batch_validation and method == "POST":
+        headers["x-batch-validation"] = batch_validation
 
     try:
         resp = requests.request(

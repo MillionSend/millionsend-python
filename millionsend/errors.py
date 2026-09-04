@@ -32,14 +32,38 @@ class MillionSendError(Exception):
 
 
 class MissingApiKeyError(MillionSendError):
-    """No API key was configured (option or MILLIONSEND_API_KEY)."""
+    """No API key was configured (option or MILLIONSEND_API_KEY), or the request carried none."""
+
+
+class InvalidApiKeyError(MillionSendError):
+    pass
 
 
 class ValidationError(MillionSendError):
     pass
 
 
+class InvalidParameterError(MillionSendError):
+    pass
+
+
+class InvalidPayloadError(MillionSendError):
+    pass
+
+
+class PayloadTooLargeError(MillionSendError):
+    pass
+
+
 class NotFoundError(MillionSendError):
+    pass
+
+
+class ConflictError(MillionSendError):
+    pass
+
+
+class ForbiddenError(MillionSendError):
     pass
 
 
@@ -51,7 +75,27 @@ class SendingPausedError(MillionSendError):
     pass
 
 
+class RateLimitExceededError(MillionSendError):
+    pass
+
+
+class DailyQuotaExceededError(MillionSendError):
+    pass
+
+
+class PlanLimitReachedError(MillionSendError):
+    pass
+
+
 class InvalidIdempotentRequestError(MillionSendError):
+    pass
+
+
+class ConcurrentIdempotentRequestsError(MillionSendError):
+    pass
+
+
+class InternalServerError(MillionSendError):
     pass
 
 
@@ -61,11 +105,23 @@ class ApplicationError(MillionSendError):
 
 # name discriminant -> exception class; unknown names fall back to the base.
 ERROR_TYPES = {
+    "missing_api_key": MissingApiKeyError,
+    "invalid_api_key": InvalidApiKeyError,
     "validation_error": ValidationError,
+    "invalid_parameter": InvalidParameterError,
+    "invalid_payload": InvalidPayloadError,
+    "payload_too_large": PayloadTooLargeError,
     "not_found": NotFoundError,
+    "conflict": ConflictError,
+    "forbidden": ForbiddenError,
     "restricted_api_key": RestrictedApiKeyError,
     "sending_paused": SendingPausedError,
+    "rate_limit_exceeded": RateLimitExceededError,
+    "daily_quota_exceeded": DailyQuotaExceededError,
+    "plan_limit_reached": PlanLimitReachedError,
     "invalid_idempotent_request": InvalidIdempotentRequestError,
+    "concurrent_idempotent_requests": ConcurrentIdempotentRequestsError,
+    "internal_server_error": InternalServerError,
     "application_error": ApplicationError,
 }
 
