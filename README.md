@@ -139,7 +139,7 @@ millionsend.Contacts.create({
     "topics": [{"id": topic.id, "subscription": "opt_in"}],
 })
 millionsend.Contacts.get(email="ada@acme.dev")  # by id or email (email wins)
-millionsend.Contacts.get("contact-id")          # bare id works too
+millionsend.Contacts.get("contact-id")          # bare id works too, as does resend's id="contact-id"
 millionsend.Contacts.update({"id": "contact-id", "unsubscribed": True, "first_name": None})  # None clears
 millionsend.Contacts.update({"email": "ada@acme.dev", "properties": {"plan": None}})       # None removes the key
 millionsend.Contacts.remove(email="ada@acme.dev")
@@ -212,7 +212,9 @@ broadcast = millionsend.Broadcasts.create({
 millionsend.Broadcasts.list()
 millionsend.Broadcasts.get(broadcast.id)
 millionsend.Broadcasts.update(broadcast.id, {"subject": "Launch 🚀", "topic_id": None})  # draft only; None clears
+millionsend.Broadcasts.update({"broadcast_id": broadcast.id, "subject": "Launch"})        # resend-python shape
 millionsend.Broadcasts.send(broadcast.id, scheduled_at="2026-09-01T09:00:00Z")  # omit to send now
+millionsend.Broadcasts.send({"broadcast_id": broadcast.id})                      # resend-python shape
 millionsend.Broadcasts.cancel(broadcast.id)  # scheduled only
 millionsend.Broadcasts.remove(broadcast.id)  # draft only
 ```
@@ -224,7 +226,7 @@ Dynamic segments are a saved filter over the team's contacts — a MillionSend f
 ```python
 segment = millionsend.Segments.create({
     "name": "Pro plan",
-    "filter": {"match": "all", "conditions": [
+    "filter": {"match": "all", "conditions": [   # optional; omit or None = every contact
         {"field": "property:plan", "op": "equals", "value": "pro"},
     ]},
 })
@@ -316,6 +318,8 @@ millionsend.Templates.publish(template.id)   # templates are always published; k
 millionsend.Templates.remove(template.id)
 ```
 
+Resend's `from`, `reply_to` and `variables` are forwarded as given; the server answers 422 for them until templates model them.
+
 ### Usage (MillionSend extension)
 
 ```python
@@ -357,7 +361,7 @@ Method names and payloads match. Notes:
 - **Same resources**: `Emails`, `Batch`, `Contacts` (with `.Topics`, `.Segments`), `ContactProperties`, `Topics`, `Broadcasts`, `Suppressions` (with `.Batch`), `Domains`, `Webhooks`, `ApiKeys`, `Templates`. Payloads are sent verbatim, so a resend-python payload works as-is.
 - **No audiences**: contacts are team-global, so there is no `Audiences` resource and no `audience_id` params. The API's `/audiences/...` routes are a compatibility shim for raw HTTP callers and are deliberately not exposed here. Resend's `Segments` is an alias of audiences; MillionSend's `Segments` is the distinct dynamic-filter feature.
 - **MillionSend extensions** (no Resend equivalent): `Segments`, `Contacts.Batch`, `Contacts.list(segment_id=...)`, `Usage`, `Deliverability`, `Emails.get_insights`.
-- **Not available**: Resend's `ApiKeys.update`, `Webhooks` event history/replay, `Emails.share` / `Emails.metrics`, domain claims and contact imports.
+- **Not available**: Resend's `ApiKeys.update`, `Webhooks` event history/replay/`verify`, `Emails.share` / `Emails.metrics` / receiving, `Broadcasts.recipients` / `clicked_links`, `Contacts.Segments.list`, `DomainClaims`, `ContactImports`, `Automations`, `Events`, `Logs`, `OAuthGrants`, and the `*_async` variants.
 - MillionSend raises on API errors just like `resend`; the exception carries `.code` / `.status_code` / `.message`.
 
 ## License

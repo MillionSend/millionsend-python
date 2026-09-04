@@ -173,6 +173,13 @@ def test_contacts_addressing(http):
     millionsend.Contacts.get(email="c@x.dev")
     assert http.calls[1]["path"] == "/contacts/" + quote("c@x.dev", safe="")
 
+    millionsend.Contacts.get(id="c2")
+    assert http.calls[2]["path"] == "/contacts/c2"
+
+    millionsend.Contacts.remove(id="c2")
+    assert http.calls[3]["method"] == "DELETE"
+    assert http.calls[3]["path"] == "/contacts/c2"
+
 
 def test_contacts_email_wins_over_id(http):
     millionsend.Contacts.get(contact_id="c1", email="c@x.dev")
@@ -276,6 +283,30 @@ def test_segments_crud(http):
 
     millionsend.Segments.remove("s1")
     assert http.calls[4]["method"] == "DELETE"
+
+    millionsend.Segments.create({"name": "Everyone"})
+    assert http.calls[5]["body"] == {"name": "Everyone"}
+
+    millionsend.Segments.update("s1", {"filter": None})
+    assert http.calls[6]["body"] == {"filter": None}
+
+
+def test_broadcasts_resend_dict_shape(http):
+    millionsend.Broadcasts.update({"broadcast_id": "b1", "subject": "New", "topic_id": None})
+    assert http.calls[0]["method"] == "PATCH"
+    assert http.calls[0]["path"] == "/broadcasts/b1"
+    assert http.calls[0]["body"] == {"subject": "New", "topic_id": None}
+
+    millionsend.Broadcasts.send({"broadcast_id": "b1", "scheduled_at": "in 1 hour"})
+    assert http.calls[1]["path"] == "/broadcasts/b1/send"
+    assert http.calls[1]["body"] == {"scheduled_at": "in 1 hour"}
+
+    millionsend.Broadcasts.send({"id": "b1"})
+    assert http.calls[2]["body"] == {}
+
+    with pytest.raises(ValueError):
+        millionsend.Broadcasts.update({"subject": "no id"})
+    assert len(http.calls) == 3
 
 
 FULL_EMAIL = {
@@ -532,12 +563,11 @@ def test_domains(http):
     assert http.calls[3]["path"] == "/domains/d1/verify"
     assert http.calls[3]["body"] is None
 
-    millionsend.Domains.update(
-        {"id": "d1", "open_tracking": True, "click_tracking": True, "tracking_subdomain": None}
-    )
+    update = {"open_tracking": True, "click_tracking": True, "tracking_subdomain": None, "tls": "enforced"}
+    millionsend.Domains.update(dict(update, id="d1"))
     assert http.calls[4]["method"] == "PATCH"
     assert http.calls[4]["path"] == "/domains/d1"
-    assert http.calls[4]["body"] == {"open_tracking": True, "click_tracking": True, "tracking_subdomain": None}
+    assert http.calls[4]["body"] == update
 
     millionsend.Domains.remove("d1")
     assert http.calls[5]["method"] == "DELETE"
@@ -598,7 +628,16 @@ def test_api_keys(http):
 
 
 def test_templates(http):
-    params = {"name": "Welcome", "html": "<p>{{{NAME}}}</p>", "subject": "Hi", "text": "hi", "alias": "welcome-v1"}
+    params = {
+        "name": "Welcome",
+        "html": "<p>{{{NAME}}}</p>",
+        "subject": "Hi",
+        "text": "hi",
+        "alias": "welcome-v1",
+        "from": "Acme <hi@x.dev>",
+        "reply_to": ["r@x.dev"],
+        "variables": [{"key": "NAME", "type": "string"}],
+    }
     millionsend.Templates.create(params)
     assert http.calls[0]["method"] == "POST"
     assert http.calls[0]["path"] == "/templates"

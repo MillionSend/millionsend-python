@@ -1,5 +1,6 @@
 """Email templates, addressable by id OR alias. ``None`` for ``alias`` /
-``subject`` / ``text`` in an update clears the field."""
+``subject`` / ``text`` in an update clears the field. ``from``, ``reply_to``
+and ``variables`` are forwarded as given; the server answers 422 for them."""
 
 from typing import Any, Dict, Optional
 
@@ -9,7 +10,7 @@ from ._client import list_query, path_id, request, split_id
 class Templates:
     @classmethod
     def create(cls, params: Dict[str, Any]) -> Any:
-        """POST /templates — name, html, subject?, text?, alias?"""
+        """POST /templates — name, html, subject?, text?, alias? (+ from, reply_to, variables passed through)"""
         return request("POST", "/templates", body=params)
 
     @classmethod

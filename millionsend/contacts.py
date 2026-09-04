@@ -78,8 +78,11 @@ class Contacts:
         return request("POST", "/contacts", body=params)
 
     @classmethod
-    def get(cls, contact_id: Optional[str] = None, email: Optional[str] = None) -> Any:
-        return request("GET", f"/contacts/{_key(contact_id, email)}")
+    def get(
+        cls, contact_id: Optional[str] = None, email: Optional[str] = None, id: Optional[str] = None
+    ) -> Any:
+        """GET /contacts/{idOrEmail} — ``id`` is resend-python's name for ``contact_id``."""
+        return request("GET", f"/contacts/{_key(contact_id or id, email)}")
 
     @classmethod
     def update(cls, params: Dict[str, Any]) -> Any:
@@ -89,8 +92,10 @@ class Contacts:
         return request("PATCH", f"/contacts/{_key(contact_id, email)}", body=body)
 
     @classmethod
-    def remove(cls, contact_id: Optional[str] = None, email: Optional[str] = None) -> Any:
-        return request("DELETE", f"/contacts/{_key(contact_id, email)}")
+    def remove(
+        cls, contact_id: Optional[str] = None, email: Optional[str] = None, id: Optional[str] = None
+    ) -> Any:
+        return request("DELETE", f"/contacts/{_key(contact_id or id, email)}")
 
     @classmethod
     def list(

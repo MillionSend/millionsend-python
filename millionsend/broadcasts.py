@@ -1,12 +1,21 @@
 """Broadcasts — draft, schedule, send, and cancel campaigns.
 
 Targeting is an optional ``segment_id`` and/or ``topic_id`` on create/update;
-neither set means every contact of the team.
+neither set means every contact of the team. ``update`` and ``send`` take
+``(broadcast_id, ...)`` or resend-python's single ``{"broadcast_id": ..., **fields}`` dict.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple, Union
 
-from ._client import list_query, path_id, request
+from ._client import list_query, path_id, request, split_id
+
+Target = Union[str, Dict[str, Any]]
+
+
+def _target(broadcast_id: Target, body: Optional[Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
+    if isinstance(broadcast_id, dict):
+        return split_id(broadcast_id, "broadcast_id", "id")
+    return path_id(broadcast_id), dict(body or {})
 
 
 class Broadcasts:
@@ -28,9 +37,10 @@ class Broadcasts:
         return request("GET", "/broadcasts", query=list_query(limit, after, before))
 
     @classmethod
-    def update(cls, broadcast_id: str, params: Dict[str, Any]) -> Any:
+    def update(cls, broadcast_id: Target, params: Optional[Dict[str, Any]] = None) -> Any:
         """PATCH /broadcasts/{id} — draft only."""
-        return request("PATCH", f"/broadcasts/{path_id(broadcast_id)}", body=params)
+        ident, body = _target(broadcast_id, params)
+        return request("PATCH", f"/broadcasts/{ident}", body=body)
 
     @classmethod
     def remove(cls, broadcast_id: str) -> Any:
@@ -38,10 +48,12 @@ class Broadcasts:
         return request("DELETE", f"/broadcasts/{path_id(broadcast_id)}")
 
     @classmethod
-    def send(cls, broadcast_id: str, scheduled_at: Optional[str] = None) -> Any:
+    def send(cls, broadcast_id: Target, scheduled_at: Optional[str] = None) -> Any:
         """POST /broadcasts/{id}/send — omit scheduled_at to send now."""
-        body = {"scheduled_at": scheduled_at} if scheduled_at is not None else {}
-        return request("POST", f"/broadcasts/{path_id(broadcast_id)}/send", body=body)
+        ident, body = _target(
+            broadcast_id, {"scheduled_at": scheduled_at} if scheduled_at is not None else {}
+        )
+        return request("POST", f"/broadcasts/{ident}/send", body=body)
 
     @classmethod
     def cancel(cls, broadcast_id: str) -> Any:
