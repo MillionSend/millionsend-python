@@ -244,6 +244,11 @@ def test_contacts_topics_list(http):
     millionsend.Contacts.Topics.list(id="c2")
     assert http.calls[2]["path"] == "/contacts/c2/topics"
 
+    millionsend.Contacts.Topics.list("c1", None, {"limit": 5, "after": "cur"})
+    assert http.calls[3]["params"] == {"limit": 5, "after": "cur"}
+    millionsend.Contacts.Topics.list(email="c@x.dev", params={"limit": 5, "before": None})
+    assert http.calls[4]["params"] == {"limit": 5}
+
 
 def test_contacts_topics_update_bare_array(http):
     http.body = {"id": "c1"}

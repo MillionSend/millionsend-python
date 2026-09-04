@@ -22,12 +22,20 @@ def _params_key(params: Dict[str, Any]) -> str:
 class ContactTopics:
     @classmethod
     def list(
-        cls, contact_id: Optional[str] = None, email: Optional[str] = None, id: Optional[str] = None
+        cls,
+        contact_id: Optional[str] = None,
+        email: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None,
+        id: Optional[str] = None,
     ) -> Any:
         """GET /contacts/{idOrEmail}/topics — every team topic with the contact's effective
         ``subscription``; ``explicit`` is False when it is the topic default.
+
+        ``params`` is resend-python's pagination dict, forwarded as the query.
         """
-        return request("GET", f"/contacts/{_key(contact_id or id, email)}/topics")
+        return request(
+            "GET", f"/contacts/{_key(contact_id or id, email)}/topics", query=list_query(params)
+        )
 
     @classmethod
     def update(cls, params: Dict[str, Any]) -> Any:
