@@ -144,6 +144,7 @@ millionsend.Contacts.get("contact-id")          # bare id works too, as does res
 millionsend.Contacts.update({"id": "contact-id", "unsubscribed": True, "first_name": None})  # None clears
 millionsend.Contacts.update({"email": "ada@acme.dev", "properties": {"plan": None}})       # None removes the key
 millionsend.Contacts.remove(email="ada@acme.dev")
+millionsend.Contacts.preferences_link(email="ada@acme.dev").url  # hosted preference page (MillionSend extension); no expiry, hand it only to the contact
 millionsend.Contacts.list(limit=50)
 millionsend.Contacts.list(segment_id=segment.id)  # GET /segments/{id}/contacts
 
@@ -157,6 +158,9 @@ result.data[0].status  # created | updated | skipped
 result.counts.failed
 result.errors          # permissive mode: [{index, message}]
 
+# Bulk delete (MillionSend extension) — {"ids": [...]} or {"emails": [...]}, up to 1000; data lists only the rows deleted
+millionsend.Contacts.Batch.remove({"emails": ["a@acme.dev", "b@acme.dev"]})
+
 # Segment membership — mirrors resend's contacts.segments
 millionsend.Contacts.Segments.add({"contact_id": "contact-id", "segment_id": segment.id})
 millionsend.Contacts.Segments.remove({"email": "ada@acme.dev", "segment_id": segment.id})
@@ -168,7 +172,7 @@ millionsend.Contacts.Topics.update({
 })
 topics = millionsend.Contacts.Topics.list(email="ada@acme.dev")  # GET /contacts/{idOrEmail}/topics
 for t in topics.data:
-    print(t.name, t.subscription, t.explicit)  # subscription is the effective choice; explicit=False means the topic default applies
+    print(t.name, t.subscription, t.explicit, t.visibility)  # subscription is the effective choice; explicit=False means the topic default applies; the preference page lists public topics only
 ```
 
 Creating a contact whose email already exists on the team (case-insensitive) answers 409 and raises `ValidationError`.
@@ -291,6 +295,12 @@ millionsend.Webhooks.list()
 millionsend.Webhooks.get(webhook.id)
 millionsend.Webhooks.update({"webhook_id": webhook.id, "status": "disabled"})  # endpoint, events, status
 millionsend.Webhooks.remove(webhook.id)
+
+# Rotate the signing secret (MillionSend extension). For overlap_hours (default 24, max 72) deliveries
+# carry both signatures, so the receiver can switch without a gap; 0 drops the old secret at once.
+rotated = millionsend.Webhooks.rotate(webhook.id, {"overlap_hours": 24})  # or {"signing_secret": "whsec_..."}
+rotated.signing_secret
+rotated.previous_secret_expires_at   # None once the old secret stops signing; also on get()
 ```
 
 ### API keys
@@ -364,7 +374,7 @@ Method names and payloads match. Notes:
 
 - **Same resources**: `Emails`, `Batch`, `Contacts` (with `.Topics`, `.Segments`), `ContactProperties`, `Topics`, `Broadcasts`, `Suppressions` (with `.Batch`), `Domains`, `Webhooks`, `ApiKeys`, `Templates`. Payloads are sent verbatim, so a resend-python payload works as-is.
 - **No audiences**: contacts are team-global, so there is no `Audiences` resource and no `audience_id` params. The API's `/audiences/...` routes are a compatibility shim for raw HTTP callers and are deliberately not exposed here. Resend's `Segments` is an alias of audiences; MillionSend's `Segments` is the distinct dynamic-filter feature.
-- **MillionSend extensions** (no Resend equivalent): `Segments`, `Contacts.Batch`, `Contacts.list(segment_id=...)`, `Usage`, `Deliverability`, `Emails.get_insights`.
+- **MillionSend extensions** (no Resend equivalent): `Segments`, `Contacts.Batch`, `Contacts.list(segment_id=...)`, `Contacts.preferences_link`, `Webhooks.rotate`, `Usage`, `Deliverability`, `Emails.get_insights`.
 - **Not available**: Resend's `ApiKeys.update`, `Webhooks` event history/replay/`verify`, `Emails.share` / `Emails.metrics` / receiving, `Broadcasts.recipients` / `clicked_links`, `Contacts.Segments.list`, `DomainClaims`, `ContactImports`, `Automations`, `Events`, `Logs`, `OAuthGrants`, and the `*_async` variants.
 - MillionSend raises on API errors just like `resend`; the exception carries `.code` / `.status_code` / `.message`.
 

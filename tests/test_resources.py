@@ -213,6 +213,7 @@ def test_contacts_topics_list(http):
                 "description": None,
                 "subscription": "opt_in",
                 "explicit": False,
+                "visibility": "public",
             },
             {
                 "id": "t2",
@@ -235,6 +236,7 @@ def test_contacts_topics_list(http):
     assert res.data[0].description is None
     assert res.data[0].subscription == "opt_in"
     assert res.data[0].explicit is False
+    assert res.data[0].visibility == "public"
     assert res.data[1].description == "Weekly"
     assert res.data[1].subscription == "opt_out"
     assert res.data[1].explicit is True
@@ -486,6 +488,41 @@ def test_contacts_batch_create(http):
     assert http.calls[2]["headers"]["x-batch-validation"] == "strict"
 
 
+def test_contacts_batch_remove(http):
+    http.body = {"data": [{"object": "contact", "contact": "c1", "deleted": True}]}
+    res = millionsend.Contacts.Batch.remove({"ids": ["c1", "c2"]})
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/contacts/batch/remove"
+    assert http.calls[0]["params"] is None
+    assert http.calls[0]["body"] == {"ids": ["c1", "c2"]}
+    assert res.data[0].contact == "c1"
+    assert res.data[0].deleted is True
+
+    millionsend.Contacts.Batch.remove({"emails": ["a@x.dev"]})
+    assert http.calls[1]["path"] == "/contacts/batch/remove"
+    assert http.calls[1]["body"] == {"emails": ["a@x.dev"]}
+
+
+def test_contacts_preferences_link(http):
+    http.body = {"object": "preferences_link", "contact": "c1", "url": "https://app.test/p?t=abc"}
+    res = millionsend.Contacts.preferences_link("c1")
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/contacts/c1/preferences-link"
+    assert http.calls[0]["body"] is None
+    assert res.object == "preferences_link"
+    assert res.contact == "c1"
+    assert res.url == "https://app.test/p?t=abc"
+
+    millionsend.Contacts.preferences_link(email="c@x.dev")
+    assert http.calls[1]["path"] == "/contacts/" + quote("c@x.dev", safe="") + "/preferences-link"
+
+    millionsend.Contacts.preferences_link(id="c2")
+    assert http.calls[2]["path"] == "/contacts/c2/preferences-link"
+
+    millionsend.Contacts.preferences_link(contact_id="c1", email="c@x.dev")
+    assert http.calls[3]["path"] == "/contacts/" + quote("c@x.dev", safe="") + "/preferences-link"
+
+
 def test_contacts_segments_add_remove(http):
     millionsend.Contacts.Segments.add({"contact_id": "c1", "segment_id": "s1"})
     assert http.calls[0]["method"] == "POST"
@@ -655,6 +692,29 @@ def test_webhooks(http):
     millionsend.Webhooks.remove("w1")
     assert http.calls[5]["method"] == "DELETE"
     assert http.calls[5]["path"] == "/webhooks/w1"
+
+
+def test_webhooks_rotate(http):
+    http.body = {
+        "object": "webhook",
+        "id": "w1",
+        "signing_secret": "whsec_new",
+        "previous_secret_expires_at": "2026-01-02T00:00:00.000Z",
+    }
+    res = millionsend.Webhooks.rotate("w1")
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/webhooks/w1/rotate"
+    assert http.calls[0]["headers"]["Content-Type"] == "application/json"
+    assert http.calls[0]["body"] == {}
+    assert res.signing_secret == "whsec_new"
+    assert res.previous_secret_expires_at == "2026-01-02T00:00:00.000Z"
+
+    millionsend.Webhooks.rotate("w1", {"signing_secret": "whsec_mine", "overlap_hours": 0})
+    assert http.calls[1]["path"] == "/webhooks/w1/rotate"
+    assert http.calls[1]["body"] == {"signing_secret": "whsec_mine", "overlap_hours": 0}
+
+    millionsend.Webhooks.rotate("w1", {"overlap_hours": 72})
+    assert http.calls[2]["body"] == {"overlap_hours": 72}
 
 
 def test_api_keys(http):

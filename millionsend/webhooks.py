@@ -33,3 +33,12 @@ class Webhooks:
     @classmethod
     def remove(cls, webhook_id: str) -> Any:
         return request("DELETE", f"/webhooks/{path_id(webhook_id)}")
+
+    @classmethod
+    def rotate(cls, webhook_id: str, params: Optional[Dict[str, Any]] = None) -> Any:
+        """POST /webhooks/{id}/rotate — ``{"signing_secret"?: "whsec_…", "overlap_hours"?: 0..72}``.
+
+        Returns the new ``signing_secret``; ``previous_secret_expires_at`` is when the old one
+        stops co-signing deliveries (``None`` when ``overlap_hours`` is 0).
+        """
+        return request("POST", f"/webhooks/{path_id(webhook_id)}/rotate", body=params or {})

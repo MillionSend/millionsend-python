@@ -83,6 +83,14 @@ class ContactBatch:
             **request_options(options, batch_validation=batch_validation),
         )
 
+    @classmethod
+    def remove(cls, params: Dict[str, Any]) -> Any:
+        """POST /contacts/batch/remove — ``{"ids": [...]}`` or ``{"emails": [...]}``, 1..1000.
+
+        ``data`` lists only the contacts actually deleted; unknown ids/addresses are skipped.
+        """
+        return request("POST", "/contacts/batch/remove", body=params)
+
 
 class Contacts:
     # Mirrors Resend's nesting: Contacts.Topics.update(...), Contacts.Segments.add(...).
@@ -113,6 +121,17 @@ class Contacts:
         cls, contact_id: Optional[str] = None, email: Optional[str] = None, id: Optional[str] = None
     ) -> Any:
         return request("DELETE", f"/contacts/{_key(contact_id or id, email)}")
+
+    @classmethod
+    def preferences_link(
+        cls, contact_id: Optional[str] = None, email: Optional[str] = None, id: Optional[str] = None
+    ) -> Any:
+        """POST /contacts/{idOrEmail}/preferences-link — the contact's hosted preference page URL.
+
+        The link never expires and lets its holder change that contact's preferences, so hand
+        it only to the contact. 422 when the instance cannot build hosted links.
+        """
+        return request("POST", f"/contacts/{_key(contact_id or id, email)}/preferences-link")
 
     @classmethod
     def list(
