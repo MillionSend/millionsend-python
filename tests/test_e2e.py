@@ -1,7 +1,7 @@
 """End-to-end smoke test against a real MillionSend instance.
 
-Opt-in: runs only when MILLIONSEND_API_KEY is set (and, if not localhost:3001,
-MILLIONSEND_BASE_URL). It exercises the contact lifecycle, which needs no
+Opt-in: runs only when MILLIONSEND_API_KEY is set (and MILLIONSEND_BASE_URL when
+the target is not MillionSend Cloud). It exercises the contact lifecycle, which needs no
 verified domain. Sending is not asserted because it needs a verified sender
 domain.
 

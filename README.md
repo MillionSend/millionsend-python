@@ -2,7 +2,7 @@
 
 Official Python SDK for [MillionSend](https://github.com/MillionSend/millionsend) — a self-hostable, [Resend](https://resend.com)-compatible email API on AWS SES.
 
-The API is wire-compatible with Resend and this SDK deliberately mirrors the shape of the `resend` PyPI package, so migrating is mostly a find-and-replace: swap the import, set `base_url` to your instance.
+The API is wire-compatible with Resend and this SDK deliberately mirrors the shape of the `resend` PyPI package, so migrating is mostly a find-and-replace: swap the import and the key. MillionSend Cloud works with just the key; a self-hosted instance also sets `base_url`.
 
 ## Install
 
@@ -18,7 +18,7 @@ Requires Python 3.9+. Depends only on `requests`.
 import millionsend
 
 millionsend.api_key = "ms_123"
-millionsend.base_url = "https://mail.acme.dev"  # your instance
+millionsend.base_url = "https://mail.acme.dev"  # self-hosted only; omit for MillionSend Cloud
 
 email = millionsend.Emails.send({
     "from": "Acme <onboarding@acme.dev>",
@@ -44,7 +44,7 @@ millionsend.allow_insecure_http = False          # accept a non-loopback http://
 ```
 
 - `api_key` falls back to `MILLIONSEND_API_KEY`. Missing key raises `MissingApiKeyError` on the first call.
-- `base_url` falls back to `MILLIONSEND_BASE_URL`, then `http://localhost:3001`. MillionSend is self-hosted, so **set this to your deployment in production.**
+- `base_url` falls back to `MILLIONSEND_BASE_URL`, then `https://api.millionsend.com` (MillionSend Cloud). Self-hosting? Set it to your instance's origin.
 - Plain `http://` is only accepted for loopback hosts (`localhost`, `127.0.0.1`, `::1`); any other `http://` URL raises `MillionSendError` on the first call, since the API key is sent as a bearer header. Set `millionsend.allow_insecure_http = True` to talk to a non-TLS instance elsewhere (e.g. inside a private network).
 
 Request/response casing: request params are plain dicts in the API's `snake_case` (`reply_to`, `scheduled_at`, `first_name`) and are sent to the wire as given — nothing is filtered or renamed. Responses are `dict` subclasses that also allow attribute access (`resp.id`, `resp.data[0].id`).
@@ -83,8 +83,9 @@ except MillionSendError as e:
 
 - `e.code` is the stable `name` discriminant (`validation_error`, `not_found`, `restricted_api_key`, `sending_paused`, `invalid_idempotent_request`, …).
 - `e.status_code` is the HTTP status, or `None` for client-side/transport failures (connection refused, DNS, timeout).
+- `Emails.send` / `Batch.send` raise `AllRecipientsSuppressedError` (422 `all_recipients_suppressed`) when every `to` recipient is on the suppression list or opted out of the send's `topic_id`.
 
-Subclasses: `MissingApiKeyError`, `InvalidApiKeyError`, `ValidationError`, `InvalidParameterError`, `InvalidPayloadError`, `PayloadTooLargeError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `RestrictedApiKeyError`, `SendingPausedError`, `RateLimitExceededError`, `DailyQuotaExceededError`, `PlanLimitReachedError`, `InvalidIdempotentRequestError`, `ConcurrentIdempotentRequestsError`, `InternalServerError`, `ApplicationError`. Unknown names raise the base `MillionSendError`.
+Subclasses: `MissingApiKeyError`, `InvalidApiKeyError`, `ValidationError`, `AllRecipientsSuppressedError`, `InvalidParameterError`, `InvalidPayloadError`, `PayloadTooLargeError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `RestrictedApiKeyError`, `SendingPausedError`, `RateLimitExceededError`, `DailyQuotaExceededError`, `PlanLimitReachedError`, `InvalidIdempotentRequestError`, `ConcurrentIdempotentRequestsError`, `InternalServerError`, `ApplicationError`. Unknown names raise the base `MillionSendError`.
 
 ## Resources
 
@@ -160,11 +161,14 @@ result.errors          # permissive mode: [{index, message}]
 millionsend.Contacts.Segments.add({"contact_id": "contact-id", "segment_id": segment.id})
 millionsend.Contacts.Segments.remove({"email": "ada@acme.dev", "segment_id": segment.id})
 
-# Topic subscriptions (granular unsubscribe) — mirrors resend's contacts.topics.update
+# Topic subscriptions (granular unsubscribe) — mirrors resend's contacts.topics
 millionsend.Contacts.Topics.update({
     "email": "ada@acme.dev",
     "topics": [{"id": "topic-id", "subscription": "opt_out"}],
 })
+topics = millionsend.Contacts.Topics.list(email="ada@acme.dev")  # GET /contacts/{idOrEmail}/topics
+for t in topics.data:
+    print(t.name, t.subscription, t.explicit)  # subscription is the effective choice; explicit=False means the topic default applies
 ```
 
 Creating a contact whose email already exists on the team (case-insensitive) answers 409 and raises `ValidationError`.
@@ -350,7 +354,7 @@ print(account.score, account.band, account.guardrail_status)  # scores are None 
 - resend.api_key = "re_123"
 + import millionsend
 + millionsend.api_key = "ms_123"
-+ millionsend.base_url = "https://mail.acme.dev"
++ millionsend.base_url = "https://mail.acme.dev"  # self-hosted only
 
 - resend.Emails.send({...})
 + millionsend.Emails.send({...})

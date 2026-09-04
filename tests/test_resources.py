@@ -202,6 +202,49 @@ def test_contacts_remove_and_list(http):
     assert http.calls[1]["params"] == {"after": "cur"}
 
 
+def test_contacts_topics_list(http):
+    http.body = {
+        "object": "list",
+        "has_more": False,
+        "data": [
+            {
+                "id": "6f1d2c3e-0000-4000-8000-000000000001",
+                "name": "Insights",
+                "description": None,
+                "subscription": "opt_in",
+                "explicit": False,
+            },
+            {
+                "id": "t2",
+                "name": "Deals",
+                "description": "Weekly",
+                "subscription": "opt_out",
+                "explicit": True,
+            },
+        ],
+    }
+    res = millionsend.Contacts.Topics.list(email="c@x.dev")
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == "/contacts/" + quote("c@x.dev", safe="") + "/topics"
+    assert http.calls[0]["params"] is None
+    assert http.calls[0]["body"] is None
+    assert res.object == "list"
+    assert res.has_more is False
+    assert res.data[0].id == "6f1d2c3e-0000-4000-8000-000000000001"
+    assert res.data[0].name == "Insights"
+    assert res.data[0].description is None
+    assert res.data[0].subscription == "opt_in"
+    assert res.data[0].explicit is False
+    assert res.data[1].description == "Weekly"
+    assert res.data[1].subscription == "opt_out"
+    assert res.data[1].explicit is True
+
+    millionsend.Contacts.Topics.list("c1")
+    assert http.calls[1]["path"] == "/contacts/c1/topics"
+    millionsend.Contacts.Topics.list(id="c2")
+    assert http.calls[2]["path"] == "/contacts/c2/topics"
+
+
 def test_contacts_topics_update_bare_array(http):
     http.body = {"id": "c1"}
     millionsend.Contacts.Topics.update(

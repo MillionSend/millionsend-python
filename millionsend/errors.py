@@ -43,6 +43,10 @@ class ValidationError(MillionSendError):
     pass
 
 
+class AllRecipientsSuppressedError(MillionSendError):
+    """422 on send: every ``to`` recipient is suppressed or opted out of the send's ``topic_id``."""
+
+
 class InvalidParameterError(MillionSendError):
     pass
 
@@ -108,6 +112,7 @@ ERROR_TYPES = {
     "missing_api_key": MissingApiKeyError,
     "invalid_api_key": InvalidApiKeyError,
     "validation_error": ValidationError,
+    "all_recipients_suppressed": AllRecipientsSuppressedError,
     "invalid_parameter": InvalidParameterError,
     "invalid_payload": InvalidPayloadError,
     "payload_too_large": PayloadTooLargeError,

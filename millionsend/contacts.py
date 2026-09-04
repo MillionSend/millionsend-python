@@ -21,6 +21,15 @@ def _params_key(params: Dict[str, Any]) -> str:
 
 class ContactTopics:
     @classmethod
+    def list(
+        cls, contact_id: Optional[str] = None, email: Optional[str] = None, id: Optional[str] = None
+    ) -> Any:
+        """GET /contacts/{idOrEmail}/topics — every team topic with the contact's effective
+        ``subscription``; ``explicit`` is False when it is the topic default.
+        """
+        return request("GET", f"/contacts/{_key(contact_id or id, email)}/topics")
+
+    @classmethod
     def update(cls, params: Dict[str, Any]) -> Any:
         """PATCH /contacts/{idOrEmail}/topics — body is the bare topics array."""
         return request("PATCH", f"/contacts/{_params_key(params)}/topics", body=params["topics"])

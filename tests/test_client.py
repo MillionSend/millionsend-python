@@ -60,6 +60,21 @@ def test_base_url_default_and_trailing_slash(monkeypatch):
     assert seen["url"] == "https://api.test/emails/e1"
 
 
+def test_base_url_defaults_to_cloud_then_env_then_option(http, monkeypatch):
+    monkeypatch.setattr(millionsend, "base_url", None)
+    monkeypatch.delenv("MILLIONSEND_BASE_URL", raising=False)
+    millionsend.Emails.get("e1")
+    assert http.calls[0]["url"] == "https://api.millionsend.com/emails/e1"
+
+    monkeypatch.setenv("MILLIONSEND_BASE_URL", "https://mail.example.com")
+    millionsend.Emails.get("e1")
+    assert http.calls[1]["url"] == "https://mail.example.com/emails/e1"
+
+    monkeypatch.setattr(millionsend, "base_url", "https://api.test")
+    millionsend.Emails.get("e1")
+    assert http.calls[2]["url"] == "https://api.test/emails/e1"
+
+
 def test_refuses_non_loopback_http_unless_allowed(http, monkeypatch):
     monkeypatch.setattr(millionsend, "allow_insecure_http", False)
     for base in ("http://mail.example.com", "http://mail.example.com/"):
@@ -204,6 +219,7 @@ def test_every_api_error_name_maps_to_a_subclass(http):
         "forbidden": (403, millionsend.ForbiddenError),
         "invalid_parameter": (400, millionsend.InvalidParameterError),
         "invalid_payload": (400, millionsend.InvalidPayloadError),
+        "all_recipients_suppressed": (422, millionsend.AllRecipientsSuppressedError),
         "payload_too_large": (413, millionsend.PayloadTooLargeError),
         "conflict": (409, millionsend.ConflictError),
         "concurrent_idempotent_requests": (409, millionsend.ConcurrentIdempotentRequestsError),

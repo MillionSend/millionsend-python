@@ -5,7 +5,7 @@ Configure once at the module level, then call resource classes::
     import millionsend
 
     millionsend.api_key = "ms_123"
-    millionsend.base_url = "https://mail.acme.dev"  # self-hosted: no cloud default
+    millionsend.base_url = "https://mail.acme.dev"  # self-hosted only; Cloud needs just the key
 
     email = millionsend.Emails.send({
         "from": "Acme <onboarding@acme.dev>",
@@ -32,6 +32,7 @@ from .deliverability import Deliverability
 from .domains import Domains
 from .emails import Batch, Emails
 from .errors import (
+    AllRecipientsSuppressedError,
     ApplicationError,
     ConcurrentIdempotentRequestsError,
     ConflictError,
@@ -91,6 +92,7 @@ __all__ = [
     "MissingApiKeyError",
     "InvalidApiKeyError",
     "ValidationError",
+    "AllRecipientsSuppressedError",
     "InvalidParameterError",
     "InvalidPayloadError",
     "PayloadTooLargeError",
