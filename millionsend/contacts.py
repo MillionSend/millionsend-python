@@ -4,7 +4,7 @@ Params are already snake_case (the wire casing). ``None`` in an update clears a
 field; omit the key to leave it unchanged.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ._client import Options, list_query, path_id, request, request_options
 
@@ -84,6 +84,21 @@ class ContactBatch:
         )
 
     @classmethod
+    def get(
+        cls, params: List[Union[str, Dict[str, Any]]], include: Optional[List[str]] = None
+    ) -> Any:
+        """POST /contacts/batch/get — 1..1000 contacts by ``{"id": ...}`` or ``{"email": ...}``
+        (a bare string is an id), returned in request order.
+
+        Entries that match no contact land in ``missing`` (``[{index, id?, email?}]``) instead of
+        failing the call. ``include`` is any of ``"properties"`` / ``"topics"``, as on ``list``.
+        """
+        body: Dict[str, Any] = {"contacts": [{"id": c} if isinstance(c, str) else c for c in params]}
+        if include is not None:
+            body["include"] = include
+        return request("POST", "/contacts/batch/get", body=body)
+
+    @classmethod
     def remove(cls, params: Dict[str, Any]) -> Any:
         """POST /contacts/batch/remove — ``{"ids": [...]}`` or ``{"emails": [...]}``, 1..1000.
 
@@ -140,9 +155,16 @@ class Contacts:
         after: Optional[str] = None,
         before: Optional[str] = None,
         segment_id: Optional[str] = None,
+        include: Optional[List[str]] = None,
     ) -> Any:
-        """GET /contacts, or GET /segments/{segment_id}/contacts when ``segment_id`` is given."""
-        query = list_query(limit, after, before) or {}
+        """GET /contacts, or GET /segments/{segment_id}/contacts when ``segment_id`` is given.
+
+        ``include`` attaches ``properties`` (the typed map ``get`` returns) and/or ``topics``
+        (the rows ``Topics.list`` returns) to every item; without it items are unchanged.
+        """
+        query = list_query(limit, after, before, include=include) or {}
         segment_id = query.pop("segment_id", segment_id)
+        if isinstance(query.get("include"), list):
+            query["include"] = ",".join(query["include"])
         path = f"/segments/{path_id(segment_id)}/contacts" if segment_id else "/contacts"
         return request("GET", path, query=query or None)

@@ -202,6 +202,33 @@ def test_contacts_remove_and_list(http):
     assert http.calls[1]["params"] == {"after": "cur"}
 
 
+def test_contacts_list_include(http):
+    http.body = {
+        "object": "list",
+        "has_more": False,
+        "data": [
+            {
+                "id": "c1",
+                "email": "c@x.dev",
+                "properties": {"plan": {"type": "string", "value": "pro"}},
+                "topics": [{"id": "t1", "name": "Insights", "subscription": "opt_in", "explicit": False}],
+            }
+        ],
+    }
+    res = millionsend.Contacts.list(limit=100, include=["properties", "topics"])
+    assert http.calls[0]["path"] == "/contacts"
+    assert http.calls[0]["params"] == {"limit": 100, "include": "properties,topics"}
+    assert res.data[0].properties.plan.value == "pro"
+    assert res.data[0].topics[0].subscription == "opt_in"
+
+    millionsend.Contacts.list(segment_id="s1", include=["topics"])
+    assert http.calls[1]["path"] == "/segments/s1/contacts"
+    assert http.calls[1]["params"] == {"include": "topics"}
+
+    millionsend.Contacts.list({"limit": 5, "include": ["properties"]})
+    assert http.calls[2]["params"] == {"limit": 5, "include": "properties"}
+
+
 def test_contacts_topics_list(http):
     http.body = {
         "object": "list",
@@ -501,6 +528,29 @@ def test_contacts_batch_remove(http):
     millionsend.Contacts.Batch.remove({"emails": ["a@x.dev"]})
     assert http.calls[1]["path"] == "/contacts/batch/remove"
     assert http.calls[1]["body"] == {"emails": ["a@x.dev"]}
+
+
+def test_contacts_batch_get(http):
+    http.body = {
+        "object": "list",
+        "data": [{"object": "contact", "id": "c1", "email": "a@x.dev", "topics": []}],
+        "missing": [{"index": 1, "email": "ghost@x.dev"}, {"index": 2, "id": "c3"}],
+    }
+    res = millionsend.Contacts.Batch.get(["c1", {"email": "ghost@x.dev"}, {"id": "c3"}], include=["topics"])
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/contacts/batch/get"
+    assert http.calls[0]["params"] is None
+    assert http.calls[0]["body"] == {
+        "contacts": [{"id": "c1"}, {"email": "ghost@x.dev"}, {"id": "c3"}],
+        "include": ["topics"],
+    }
+    assert res.data[0].id == "c1"
+    assert res.missing[0].index == 1
+    assert res.missing[0].email == "ghost@x.dev"
+    assert res.missing[1].id == "c3"
+
+    millionsend.Contacts.Batch.get([{"email": "a@x.dev"}])
+    assert http.calls[1]["body"] == {"contacts": [{"email": "a@x.dev"}]}
 
 
 def test_contacts_preferences_link(http):

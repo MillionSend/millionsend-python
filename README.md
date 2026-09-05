@@ -147,6 +147,9 @@ millionsend.Contacts.remove(email="ada@acme.dev")
 millionsend.Contacts.preferences_link(email="ada@acme.dev").url  # hosted preference page (MillionSend extension); no expiry, hand it only to the contact
 millionsend.Contacts.list(limit=50)
 millionsend.Contacts.list(segment_id=segment.id)  # GET /segments/{id}/contacts
+# Bulk read (MillionSend extension): attach properties and topic subscriptions to every item,
+# so an audience reads in one request per 100 contacts instead of one per contact
+millionsend.Contacts.list(limit=100, include=["properties", "topics"])  # ?include=properties,topics
 
 # Bulk create (MillionSend extension) — up to 1000 per call
 result = millionsend.Contacts.Batch.create(
@@ -157,6 +160,12 @@ result = millionsend.Contacts.Batch.create(
 result.data[0].status  # created | updated | skipped
 result.counts.failed
 result.errors          # permissive mode: [{index, message}]
+
+# Bulk lookup (MillionSend extension) — up to 1000 contacts by id or email in one request, in request order;
+# unknown entries are listed under `missing`, not errors — one request against the rate limit
+result = millionsend.Contacts.Batch.get(["contact-id", {"email": "ada@acme.dev"}], include=["topics"])
+result.data     # [{object: "contact", id, email, ..., topics}] — the contacts found
+result.missing  # [{index, email}] — request entries that matched nobody
 
 # Bulk delete (MillionSend extension) — {"ids": [...]} or {"emails": [...]}, up to 1000; data lists only the rows deleted
 millionsend.Contacts.Batch.remove({"emails": ["a@acme.dev", "b@acme.dev"]})
