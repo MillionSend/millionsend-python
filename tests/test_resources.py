@@ -196,10 +196,21 @@ def test_contacts_update_sends_only_provided_keys(http):
 def test_contacts_remove_and_list(http):
     millionsend.Contacts.remove(email="c@x.dev")
     assert http.calls[0]["method"] == "DELETE"
+    assert http.calls[0]["params"] is None
 
     millionsend.Contacts.list(after="cur")
     assert http.calls[1]["path"] == "/contacts"
     assert http.calls[1]["params"] == {"after": "cur"}
+
+
+def test_contacts_remove_erase(http):
+    millionsend.Contacts.remove("c1", erase=True)
+    assert http.calls[0]["method"] == "DELETE"
+    assert http.calls[0]["path"] == "/contacts/c1"
+    assert http.calls[0]["params"] == {"erase": "true"}
+
+    millionsend.Contacts.remove(email="c@x.dev", erase=False)
+    assert http.calls[1]["params"] is None
 
 
 def test_contacts_list_include(http):
@@ -528,6 +539,14 @@ def test_contacts_batch_remove(http):
     millionsend.Contacts.Batch.remove({"emails": ["a@x.dev"]})
     assert http.calls[1]["path"] == "/contacts/batch/remove"
     assert http.calls[1]["body"] == {"emails": ["a@x.dev"]}
+
+    params = {"ids": ["c1"]}
+    millionsend.Contacts.Batch.remove(params, erase=True)
+    assert http.calls[2]["body"] == {"ids": ["c1"], "erase": True}
+    assert params == {"ids": ["c1"]}  # caller's dict untouched
+
+    millionsend.Contacts.Batch.remove({"ids": ["c1"]}, erase=False)
+    assert http.calls[3]["body"] == {"ids": ["c1"]}
 
 
 def test_contacts_batch_get(http):

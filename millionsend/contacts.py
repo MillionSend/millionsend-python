@@ -99,12 +99,15 @@ class ContactBatch:
         return request("POST", "/contacts/batch/get", body=body)
 
     @classmethod
-    def remove(cls, params: Dict[str, Any]) -> Any:
+    def remove(cls, params: Dict[str, Any], erase: bool = False) -> Any:
         """POST /contacts/batch/remove — ``{"ids": [...]}`` or ``{"emails": [...]}``, 1..1000.
 
         ``data`` lists only the contacts actually deleted; unknown ids/addresses are skipped.
+        The contacts' emails stay in the send log; ``erase`` also scrubs each address from
+        email history, event payloads and API logs (a GDPR/LGPD erasure).
         """
-        return request("POST", "/contacts/batch/remove", body=params)
+        body = {**params, "erase": True} if erase else params
+        return request("POST", "/contacts/batch/remove", body=body)
 
 
 class Contacts:
@@ -133,9 +136,19 @@ class Contacts:
 
     @classmethod
     def remove(
-        cls, contact_id: Optional[str] = None, email: Optional[str] = None, id: Optional[str] = None
+        cls,
+        contact_id: Optional[str] = None,
+        email: Optional[str] = None,
+        id: Optional[str] = None,
+        erase: bool = False,
     ) -> Any:
-        return request("DELETE", f"/contacts/{_key(contact_id or id, email)}")
+        """DELETE /contacts/{idOrEmail} — the contact's emails stay in the send log.
+
+        ``erase`` also scrubs the address from email history, event payloads and API logs
+        (a GDPR/LGPD erasure; MillionSend extension).
+        """
+        query = {"erase": "true"} if erase else None
+        return request("DELETE", f"/contacts/{_key(contact_id or id, email)}", query=query)
 
     @classmethod
     def preferences_link(

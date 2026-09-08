@@ -143,7 +143,8 @@ millionsend.Contacts.get(email="ada@acme.dev")  # by id or email (email wins)
 millionsend.Contacts.get("contact-id")          # bare id works too, as does resend's id="contact-id"
 millionsend.Contacts.update({"id": "contact-id", "unsubscribed": True, "first_name": None})  # None clears
 millionsend.Contacts.update({"email": "ada@acme.dev", "properties": {"plan": None}})       # None removes the key
-millionsend.Contacts.remove(email="ada@acme.dev")
+millionsend.Contacts.remove(email="ada@acme.dev")              # the contact's emails stay in the send log
+millionsend.Contacts.remove(email="ada@acme.dev", erase=True)  # ?erase=true — also scrubs the address from email history, event payloads and API logs (GDPR/LGPD erasure)
 millionsend.Contacts.preferences_link(email="ada@acme.dev").url  # hosted preference page (MillionSend extension); no expiry, hand it only to the contact
 millionsend.Contacts.list(limit=50)
 millionsend.Contacts.list(segment_id=segment.id)  # GET /segments/{id}/contacts
@@ -167,8 +168,10 @@ result = millionsend.Contacts.Batch.get(["contact-id", {"email": "ada@acme.dev"}
 result.data     # [{object: "contact", id, email, ..., topics}] — the contacts found
 result.missing  # [{index, email}] — request entries that matched nobody
 
-# Bulk delete (MillionSend extension) — {"ids": [...]} or {"emails": [...]}, up to 1000; data lists only the rows deleted
+# Bulk delete (MillionSend extension) — {"ids": [...]} or {"emails": [...]}, up to 1000; data lists only the rows deleted.
+# Emails stay in the send log; erase=True also scrubs each address from email history, event payloads and API logs
 millionsend.Contacts.Batch.remove({"emails": ["a@acme.dev", "b@acme.dev"]})
+millionsend.Contacts.Batch.remove({"emails": ["a@acme.dev"]}, erase=True)  # body {"emails": [...], "erase": true}
 
 # Segment membership — mirrors resend's contacts.segments
 millionsend.Contacts.Segments.add({"contact_id": "contact-id", "segment_id": segment.id})

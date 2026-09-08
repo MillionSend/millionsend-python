@@ -15,7 +15,7 @@ import requests
 
 from .errors import MillionSendError, MissingApiKeyError, raise_api_error
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 DEFAULT_BASE_URL = "https://api.millionsend.com"
 DEFAULT_TIMEOUT = 60.0
 
