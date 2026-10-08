@@ -292,9 +292,7 @@ def test_contacts_topics_list(http):
 
 def test_contacts_topics_update_bare_array(http):
     http.body = {"id": "c1"}
-    millionsend.Contacts.Topics.update(
-        {"id": "c1", "topics": [{"id": "t1", "subscription": "opt_out"}]}
-    )
+    millionsend.Contacts.Topics.update({"id": "c1", "topics": [{"id": "t1", "subscription": "opt_out"}]})
     assert http.calls[0]["method"] == "PATCH"
     assert http.calls[0]["path"] == "/contacts/c1/topics"
     assert http.calls[0]["body"] == [{"id": "t1", "subscription": "opt_out"}]

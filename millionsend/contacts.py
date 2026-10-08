@@ -33,9 +33,7 @@ class ContactTopics:
 
         ``params`` is resend-python's pagination dict, forwarded as the query.
         """
-        return request(
-            "GET", f"/contacts/{_key(contact_id or id, email)}/topics", query=list_query(params)
-        )
+        return request("GET", f"/contacts/{_key(contact_id or id, email)}/topics", query=list_query(params))
 
     @classmethod
     def update(cls, params: Dict[str, Any]) -> Any:
@@ -84,9 +82,7 @@ class ContactBatch:
         )
 
     @classmethod
-    def get(
-        cls, params: List[Union[str, Dict[str, Any]]], include: Optional[List[str]] = None
-    ) -> Any:
+    def get(cls, params: List[Union[str, Dict[str, Any]]], include: Optional[List[str]] = None) -> Any:
         """POST /contacts/batch/get — 1..1000 contacts by ``{"id": ...}`` or ``{"email": ...}``
         (a bare string is an id), returned in request order.
 
