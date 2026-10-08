@@ -169,7 +169,12 @@ def request(
 
     try:
         resp = requests.request(
-            method, url, headers=headers, data=data, params=query, timeout=_config("timeout") or DEFAULT_TIMEOUT
+            method,
+            url,
+            headers=headers,
+            data=data,
+            params=query,
+            timeout=_config("timeout") or DEFAULT_TIMEOUT,
         )
     except requests.exceptions.RequestException as exc:
         raise MillionSendError(

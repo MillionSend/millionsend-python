@@ -5,7 +5,7 @@ import json
 import pytest
 
 import millionsend
-import millionsend._client as _client
+from millionsend import _client
 
 
 class FakeResponse:

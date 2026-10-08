@@ -18,10 +18,26 @@ Homepage = "https://github.com/MillionSend/millionsend-python"
 Repository = "https://github.com/MillionSend/millionsend-python"
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "ruff==0.16.9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["millionsend"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 110
+# The README's Python samples keep their hand-aligned comments.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+ignore = [
+    # Public signatures keep typing.Optional/Dict/List; rewriting the annotations changes them.
+    "FA100",
+    "UP006",
+    "UP035",
+    # __all__ is grouped by purpose (config, resources, errors), not alphabetized.
+    "RUF022",
+]

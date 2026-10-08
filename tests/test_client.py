@@ -4,12 +4,12 @@ import pytest
 import requests
 
 import millionsend
-import millionsend._client as _client
 from millionsend import (
     MillionSendError,
     MissingApiKeyError,
     NotFoundError,
     ValidationError,
+    _client,
 )
 
 
