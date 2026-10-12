@@ -257,3 +257,16 @@ def test_long_poll_wait_stretches_the_deadline(http, monkeypatch):
 
     millionsend.Inboxes.Codes.latest("ib1", wait=1)
     assert http.calls[2]["timeout"] == 11.0
+
+
+def test_never_sends_a_path_an_empty_or_dot_id_would_redirect(http):
+    for call in (
+        lambda: millionsend.Inboxes.Labels.remove("ib1", ".."),
+        lambda: millionsend.Inboxes.Threads.remove("ib1", "."),
+        lambda: millionsend.Emails.get(""),
+    ):
+        with pytest.raises(ValueError, match="empty"):
+            call()
+    assert http.calls == []
+    millionsend.Inboxes.Labels.remove("ib1", "...")
+    assert http.calls[0]["path"] == "/inboxes/ib1/labels/..."

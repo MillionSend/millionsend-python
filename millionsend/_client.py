@@ -93,6 +93,15 @@ def path_id(value: Any) -> str:
     return quote(str(value), safe="")
 
 
+def _has_dot_segment(path: str) -> bool:
+    """Whether a path has an empty, "." or ".." segment.
+
+    URL normalization resolves those away, so an id such as ".." would send the
+    request to another resource (DELETE /inboxes/{id}/labels/.. deletes the inbox).
+    """
+    return any(segment in ("", ".", "..") for segment in path.split("/")[1:])
+
+
 def split_id(params: Dict[str, Any], *keys: str) -> Tuple[str, Dict[str, Any]]:
     """Pop the target id out of a resend-python style ``{"id": ..., **fields}`` dict.
 
@@ -188,6 +197,8 @@ def _dispatch(
     idempotency_key: Optional[str],
     batch_validation: Optional[str],
 ) -> Tuple[int, Any]:
+    if _has_dot_segment(path):
+        raise ValueError('an id in the request path is empty, "." or ".."')
     url = _base_url() + path
     headers = {
         "Authorization": f"Bearer {_api_key()}",
