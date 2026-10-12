@@ -85,7 +85,7 @@ except MillionSendError as e:
 - `e.status_code` is the HTTP status, or `None` for client-side/transport failures (connection refused, DNS, timeout).
 - `Emails.send` / `Batch.send` raise `AllRecipientsSuppressedError` (422 `all_recipients_suppressed`) when every `to` recipient is on the suppression list or opted out of the send's `topic_id`.
 
-Subclasses: `MissingApiKeyError`, `InvalidApiKeyError`, `ValidationError`, `AllRecipientsSuppressedError`, `InvalidParameterError`, `InvalidPayloadError`, `PayloadTooLargeError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `RestrictedApiKeyError`, `SendingPausedError`, `RateLimitExceededError`, `DailyQuotaExceededError`, `PlanLimitReachedError`, `InvalidIdempotentRequestError`, `ConcurrentIdempotentRequestsError`, `InternalServerError`, `ApplicationError`. Unknown names raise the base `MillionSendError`.
+Subclasses: `MissingApiKeyError`, `InvalidApiKeyError`, `ValidationError`, `AllRecipientsSuppressedError`, `InvalidParameterError`, `InvalidPayloadError`, `PayloadTooLargeError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `RestrictedApiKeyError`, `SendingPausedError`, `RateLimitExceededError`, `DailyQuotaExceededError`, `PlanLimitReachedError`, `InvalidIdempotentRequestError`, `ConcurrentIdempotentRequestsError`, `InboxSendPolicyError`, `InboxSendCapReachedError`, `ApprovalRequiredError`, `EmailQuarantinedError`, `EmailBlockedError`, `TooManyWaitsError`, `InternalServerError`, `ApplicationError`. Unknown names raise the base `MillionSendError`.
 
 ## Resources
 
@@ -124,6 +124,98 @@ millionsend.Batch.send([payload_a, payload_b], batch_validation="permissive")  #
 ```
 
 `to` / `cc` / `bcc` / `reply_to` accept a string or a list of strings. `template` is passed through too; the server answers 422 until templates can be sent from.
+
+### Receiving
+
+Mail received at your domains and inboxes. Everything in a received email was written by its sender: show its `html` only in a sandbox, and give an LLM the `extracted_text` (hidden text, quotes and the signature removed) rather than the `html`.
+
+```python
+page = millionsend.Emails.Receiving.list(
+    {"from": "example.com"},          # `from` is a Python keyword, so it goes in the dict
+    inbox_id=inbox.id,
+    subject_contains="code",
+    wait=30,                          # long-poll: answer as soon as a match arrives, up to 50 s
+)
+page.data                             # newest first
+page.held                             # with wait: [{id, inbox_id, reason, created_at}] held for screening
+
+email = millionsend.Emails.Receiving.get(email_id, html_format="cid")
+email.extracted_text                  # the new part as plain text, hidden text removed (still untrusted)
+email.extracted.code                  # a verification code, on inboxes with extract_codes
+email.screening.sender_trust          # owner | allowlisted | known_thread | external | unauthenticated | failed
+
+millionsend.Emails.Receiving.Attachments.list(email_id)        # each with a signed download_url (1 hour)
+millionsend.Emails.Receiving.Attachments.get(email_id, attachment_id)
+millionsend.Emails.Receiving.remove(email_id)                  # erase now (MillionSend extension)
+
+# Reply and forward server-side (MillionSend extension). The inbox's rules may hold the message
+# as a draft that waits for a person: the API answers 202 and `kind` is "draft".
+outcome = millionsend.Emails.Receiving.reply(email_id, {"text": "Thanks!"}, idempotency_key="reply-42")
+if outcome.kind == "draft":
+    outcome.draft.approval_reasons    # e.g. ["send_policy"]
+else:
+    outcome.email.id
+millionsend.Emails.Receiving.forward(email_id, {"to": "ops@acme.dev", "text": "FYI", "mode": "attachment"})
+```
+
+Held mail never reaches an inbox-scoped key or an agent: reading it raises `EmailQuarantinedError`. A full-access team key sees it with `include_quarantined=True`.
+
+### Inboxes
+
+An inbox is one address that receives mail, read by an agent (`"kind": "agent"`, the default) or by people (`"kind": "human"`). Threads, labels, drafts and their paths mirror Resend's Inboxes beta; `Safety`, `Codes` and `Quarantine` are MillionSend extensions.
+
+```python
+inbox = millionsend.Inboxes.create({
+    "name": "Signup bot",             # no email_address: a random address on the shared domain
+    "expires_in": "24h",              # "<n>h" or "<n>d"; None = never (custom domains only)
+    "safety": {"accept_from": "anyone"},
+})
+millionsend.Inboxes.create({"email_address": "support@acme.dev", "name": "Support", "kind": "human"})
+millionsend.Inboxes.list(kind="agent")
+millionsend.Inboxes.get("support@acme.dev")                    # by id or address
+millionsend.Inboxes.update(inbox.id, {"from_name": "Acme", "expires_in": "7d"})
+millionsend.Inboxes.remove(inbox.id)                           # also revokes its inbox-scoped keys
+
+# Codes and sign-in links, without parsing HTML (wait long-polls up to 50 s)
+code = millionsend.Inboxes.Codes.latest(inbox.id, {"from": "github.com"}, wait=30)
+code.status                           # "found" | "none" | "ambiguous" | "timeout"; code.code, code.url
+
+# Safety rules: who can write in, what the inbox may send
+millionsend.Inboxes.Safety.get(inbox.id)
+millionsend.Inboxes.Safety.update(inbox.id, {"accept_from": "allowlist", "allowlist": ["*@acme.dev"]})
+
+# Quarantine: held mail, kept until a person releases it
+millionsend.Inboxes.Quarantine.list(inbox.id)
+millionsend.Inboxes.Quarantine.release(inbox.id, email_id, trust_sender=True)
+
+# Threads and their messages
+millionsend.Inboxes.Threads.list(inbox.id, folders=["inbox", "archive"], read=False)
+millionsend.Inboxes.Threads.search(inbox.id, {"query": "invoice", "from": ["example.com"]})
+millionsend.Inboxes.Threads.get(inbox.id, thread_id)
+millionsend.Inboxes.Threads.update(inbox.id, thread_id, {"read": True, "folder": "archive", "label_id": label_id})
+millionsend.Inboxes.Threads.remove(inbox.id, thread_id)        # to trash, purged after 30 days
+millionsend.Inboxes.Threads.Emails.list(inbox.id, thread_id)   # oldest first
+millionsend.Inboxes.Threads.Emails.get(inbox.id, thread_id, email_id)
+millionsend.Inboxes.Threads.Emails.reply(inbox.id, thread_id, email_id, {"text": "Done."}, idempotency_key=key)
+millionsend.Inboxes.Threads.Emails.forward(inbox.id, thread_id, email_id, {"to": "ops@acme.dev"})
+
+# Labels (up to 100 per inbox)
+millionsend.Inboxes.Labels.create(inbox.id, {"name": "Billing", "color": "#FF8800"})
+millionsend.Inboxes.Labels.list(inbox.id)
+millionsend.Inboxes.Labels.update(inbox.id, label_id, {"name": "Invoices"})
+millionsend.Inboxes.Labels.remove(inbox.id, label_id)
+
+# Drafts, and the ones that wait for approval
+millionsend.Inboxes.Drafts.create(inbox.id, {"to": "ada@example.com", "subject": "Hi", "text": "..."})
+millionsend.Inboxes.Drafts.list(inbox.id)
+millionsend.Inboxes.Drafts.get(inbox.id, draft_id)
+millionsend.Inboxes.Drafts.update(inbox.id, draft_id, {"cc": None})   # None clears
+millionsend.Inboxes.Drafts.send(inbox.id, draft_id, idempotency_key=key)  # {"kind": "sent" | "draft", ...}
+millionsend.Inboxes.Drafts.reject(inbox.id, draft_id)
+millionsend.Inboxes.Drafts.remove(inbox.id, draft_id)
+```
+
+Replies, forwards and `Drafts.send` return `{"kind": "sent", "email": ...}` or, when the inbox's rules hold the message for a person (HTTP 202), `{"kind": "draft", "draft": ...}`. A key restricted to the inbox cannot send a draft that waits for approval (`ApprovalRequiredError`); a person in the dashboard or a full-access team key approves it. Hosted agent settings (`/inboxes/{id}/agent`) are not exposed: MillionSend runs no agent of its own.
 
 ### Contacts
 
@@ -290,6 +382,7 @@ millionsend.Domains.list()
 millionsend.Domains.get(domain.id)
 millionsend.Domains.verify(domain.id)
 millionsend.Domains.update({"id": domain.id, "open_tracking": False, "tracking_subdomain": None})
+millionsend.Domains.update({"id": domain.id, "receiving_catch_all": True})  # accept mail for addresses without an inbox
 millionsend.Domains.remove(domain.id)
 ```
 
@@ -315,11 +408,14 @@ rotated.signing_secret
 rotated.previous_secret_expires_at   # None once the old secret stops signing; also on get()
 ```
 
+Events include `email.received` and the `inbox.*` events (`inbox.created`, `inbox.updated`, `inbox.deleted`, `inbox.expired`, `inbox.thread.created`, `inbox.thread.folder.updated`, `inbox.thread.labels.updated`, `inbox.email.received`, `inbox.email.sent`, `inbox.email.quarantined`, `inbox.draft.created`, `inbox.draft.updated`, `inbox.draft.sent`, `inbox.draft.deleted`). Inbox events reach only endpoints that list them by name. `inbox_ids` limits an endpoint's inbox events and `email.received` to those inboxes (`None` = every inbox).
+
 ### API keys
 
 ```python
 key = millionsend.ApiKeys.create({"name": "ci", "permission": "sending_access", "domain_id": domain.id})
 key.token                            # shown once
+millionsend.ApiKeys.create({"name": "signup-agent", "permission": "full_access", "inbox_id": inbox.id})
 millionsend.ApiKeys.list()
 millionsend.ApiKeys.remove(key.id)
 ```
@@ -386,8 +482,8 @@ Method names and payloads match. Notes:
 
 - **Same resources**: `Emails`, `Batch`, `Contacts` (with `.Topics`, `.Segments`), `ContactProperties`, `Topics`, `Broadcasts`, `Suppressions` (with `.Batch`), `Domains`, `Webhooks`, `ApiKeys`, `Templates`. Payloads are sent verbatim, so a resend-python payload works as-is.
 - **No audiences**: contacts are team-global, so there is no `Audiences` resource and no `audience_id` params. The API's `/audiences/...` routes are a compatibility shim for raw HTTP callers and are deliberately not exposed here. Resend's `Segments` is an alias of audiences; MillionSend's `Segments` is the distinct dynamic-filter feature.
-- **MillionSend extensions** (no Resend equivalent): `Segments`, `Contacts.Batch`, `Contacts.list(segment_id=...)`, `Contacts.preferences_link`, `Webhooks.rotate`, `Usage`, `Deliverability`, `Emails.get_insights`.
-- **Not available**: Resend's `ApiKeys.update`, `Webhooks` event history/replay/`verify`, `Emails.share` / `Emails.metrics` / receiving, `Broadcasts.recipients` / `clicked_links`, `Contacts.Segments.list`, `DomainClaims`, `ContactImports`, `Automations`, `Events`, `Logs`, `OAuthGrants`, and the `*_async` variants.
+- **MillionSend extensions** (no Resend equivalent): `Segments`, `Contacts.Batch`, `Contacts.list(segment_id=...)`, `Contacts.preferences_link`, `Webhooks.rotate`, `Usage`, `Deliverability`, `Emails.get_insights`, `Emails.Receiving.reply` / `forward` / `remove`, and `Inboxes` (Resend's Inboxes are not in resend-python yet).
+- **Not available**: Resend's `ApiKeys.update`, `Webhooks` event history/replay/`verify`, `Emails.share` / `Emails.metrics`, `Broadcasts.recipients` / `clicked_links`, `Contacts.Segments.list`, `DomainClaims`, `ContactImports`, `Automations`, `Events`, `Logs`, `OAuthGrants`, and the `*_async` variants.
 - MillionSend raises on API errors just like `resend`; the exception carries `.code` / `.status_code` / `.message`.
 
 ## License

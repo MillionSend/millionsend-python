@@ -9,9 +9,13 @@ as given — every REST field (``tags``, ``attachments``, ``headers``,
 from typing import Any, Dict, List, Optional
 
 from ._client import Options, list_query, path_id, request, request_options, split_id
+from .receiving import Receiving
 
 
 class Emails:
+    # Mirrors resend-python: Emails.Receiving.list(), Emails.Receiving.Attachments.get(...).
+    Receiving = Receiving
+
     @classmethod
     def send(
         cls,

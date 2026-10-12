@@ -34,10 +34,15 @@ from .emails import Batch, Emails
 from .errors import (
     AllRecipientsSuppressedError,
     ApplicationError,
+    ApprovalRequiredError,
     ConcurrentIdempotentRequestsError,
     ConflictError,
     DailyQuotaExceededError,
+    EmailBlockedError,
+    EmailQuarantinedError,
     ForbiddenError,
+    InboxSendCapReachedError,
+    InboxSendPolicyError,
     InternalServerError,
     InvalidApiKeyError,
     InvalidIdempotentRequestError,
@@ -51,8 +56,10 @@ from .errors import (
     RateLimitExceededError,
     RestrictedApiKeyError,
     SendingPausedError,
+    TooManyWaitsError,
     ValidationError,
 )
+from .inboxes import Inboxes
 from .segments import Segments
 from .suppressions import Suppressions
 from .templates import Templates
@@ -75,6 +82,7 @@ __all__ = [
     "allow_insecure_http",
     "Emails",
     "Batch",
+    "Inboxes",
     "Contacts",
     "ContactProperties",
     "Topics",
@@ -106,6 +114,12 @@ __all__ = [
     "PlanLimitReachedError",
     "InvalidIdempotentRequestError",
     "ConcurrentIdempotentRequestsError",
+    "InboxSendPolicyError",
+    "InboxSendCapReachedError",
+    "ApprovalRequiredError",
+    "EmailQuarantinedError",
+    "EmailBlockedError",
+    "TooManyWaitsError",
     "InternalServerError",
     "ApplicationError",
     "__version__",

@@ -99,6 +99,30 @@ class ConcurrentIdempotentRequestsError(MillionSendError):
     pass
 
 
+class InboxSendPolicyError(MillionSendError):
+    """403: the inbox's rules hold this send; create a draft for a person to approve instead."""
+
+
+class InboxSendCapReachedError(MillionSendError):
+    """429: the inbox reached its daily send cap."""
+
+
+class ApprovalRequiredError(MillionSendError):
+    """403: a key restricted to an inbox cannot send a draft that waits for approval."""
+
+
+class EmailQuarantinedError(MillionSendError):
+    """403: the email is held in quarantine until a person releases it."""
+
+
+class EmailBlockedError(MillionSendError):
+    """410: downloads of an email that carries malware are blocked."""
+
+
+class TooManyWaitsError(MillionSendError):
+    """429: too many concurrent long-polls (``wait``) for the team."""
+
+
 class InternalServerError(MillionSendError):
     pass
 
@@ -126,6 +150,12 @@ ERROR_TYPES = {
     "plan_limit_reached": PlanLimitReachedError,
     "invalid_idempotent_request": InvalidIdempotentRequestError,
     "concurrent_idempotent_requests": ConcurrentIdempotentRequestsError,
+    "inbox_send_policy": InboxSendPolicyError,
+    "inbox_send_cap_reached": InboxSendCapReachedError,
+    "approval_required": ApprovalRequiredError,
+    "email_quarantined": EmailQuarantinedError,
+    "email_blocked": EmailBlockedError,
+    "too_many_waits": TooManyWaitsError,
     "internal_server_error": InternalServerError,
     "application_error": ApplicationError,
 }

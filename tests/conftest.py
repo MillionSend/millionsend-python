@@ -37,6 +37,7 @@ class Recorder:
                 "headers": headers or {},
                 "params": params,
                 "body": json.loads(data) if data else None,
+                "timeout": timeout,
             }
         )
         if self.exc is not None:

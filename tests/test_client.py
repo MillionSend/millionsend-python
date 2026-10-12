@@ -228,6 +228,12 @@ def test_every_api_error_name_maps_to_a_subclass(http):
         "daily_quota_exceeded": (429, millionsend.DailyQuotaExceededError),
         "plan_limit_reached": (402, millionsend.PlanLimitReachedError),
         "sending_paused": (403, millionsend.SendingPausedError),
+        "inbox_send_policy": (403, millionsend.InboxSendPolicyError),
+        "inbox_send_cap_reached": (429, millionsend.InboxSendCapReachedError),
+        "approval_required": (403, millionsend.ApprovalRequiredError),
+        "email_quarantined": (403, millionsend.EmailQuarantinedError),
+        "email_blocked": (410, millionsend.EmailBlockedError),
+        "too_many_waits": (429, millionsend.TooManyWaitsError),
         "internal_server_error": (500, millionsend.InternalServerError),
         "application_error": (500, millionsend.ApplicationError),
     }
@@ -239,3 +245,15 @@ def test_every_api_error_name_maps_to_a_subclass(http):
         assert ei.value.code == name
         assert ei.value.status_code == status
         assert isinstance(ei.value, MillionSendError)
+
+
+def test_long_poll_wait_stretches_the_deadline(http, monkeypatch):
+    monkeypatch.setattr(millionsend, "timeout", 5.0)
+    millionsend.Emails.Receiving.list()
+    assert http.calls[0]["timeout"] == 5.0
+
+    millionsend.Emails.Receiving.list(wait=45)
+    assert http.calls[1]["timeout"] == 55.0
+
+    millionsend.Inboxes.Codes.latest("ib1", wait=1)
+    assert http.calls[2]["timeout"] == 11.0

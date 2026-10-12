@@ -15,9 +15,11 @@ import requests
 
 from .errors import MillionSendError, MissingApiKeyError, raise_api_error
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 DEFAULT_BASE_URL = "https://api.millionsend.com"
 DEFAULT_TIMEOUT = 60.0
+# Seconds a long-poll answer may take to arrive after the server's own ``wait`` deadline.
+LONG_POLL_MARGIN = 10.0
 
 _JSON_METHODS = ("POST", "PATCH")
 _LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
@@ -120,8 +122,19 @@ def list_query(
     else:
         query = {"limit": limit, "after": after, "before": before}
     query.update({k: v for k, v in extra.items() if v is not None})
-    query = {k: v for k, v in query.items() if v is not None}
+    query = {k: _query_value(v) for k, v in query.items() if v is not None}
+    # An empty list stays off the wire: ``labels=`` is not "no labels".
+    query = {k: v for k, v in query.items() if v != ""}
     return query or None
+
+
+def _query_value(value: Any) -> Any:
+    """Booleans as the API reads them ("true"/"false", not Python's "True"); lists comma-separated."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(v) for v in value)
+    return value
 
 
 def request_options(
@@ -151,6 +164,30 @@ def request(
     batch_validation: Optional[str] = None,
 ) -> Any:
     """Dispatch one request and return the wrapped JSON body, or raise on error."""
+    _status, parsed = _dispatch(method, path, body, query, idempotency_key, batch_validation)
+    return _wrap(parsed)
+
+
+def request_outcome(path: str, *, body: Any = None, idempotency_key: Optional[str] = None) -> Response:
+    """POST a send a person may have to approve (replies, forwards, draft sends).
+
+    Returns ``{"kind": "sent", "email": ...}``, or on an HTTP 202
+    ``{"kind": "draft", "draft": ...}``: the draft the API held for approval.
+    """
+    status, parsed = _dispatch("POST", path, body, None, idempotency_key, None)
+    if status == 202:
+        return Response(kind="draft", draft=_wrap(parsed))
+    return Response(kind="sent", email=_wrap(parsed))
+
+
+def _dispatch(
+    method: str,
+    path: str,
+    body: Any,
+    query: Optional[Dict[str, Any]],
+    idempotency_key: Optional[str],
+    batch_validation: Optional[str],
+) -> Tuple[int, Any]:
     url = _base_url() + path
     headers = {
         "Authorization": f"Bearer {_api_key()}",
@@ -167,6 +204,13 @@ def request(
     if batch_validation and method == "POST":
         headers["x-batch-validation"] = batch_validation
 
+    timeout = _config("timeout") or DEFAULT_TIMEOUT
+    # A ``wait`` query asks the API to hold its answer up to that many seconds
+    # (long-poll), so the deadline has to outlast it.
+    wait = (query or {}).get("wait")
+    if isinstance(wait, (int, float)) and not isinstance(wait, bool) and wait > 0:
+        timeout = max(timeout, wait + LONG_POLL_MARGIN)
+
     try:
         resp = requests.request(
             method,
@@ -174,7 +218,7 @@ def request(
             headers=headers,
             data=data,
             params=query,
-            timeout=_config("timeout") or DEFAULT_TIMEOUT,
+            timeout=timeout,
         )
     except requests.exceptions.RequestException as exc:
         raise MillionSendError(
@@ -191,4 +235,4 @@ def request(
 
     if not 200 <= resp.status_code < 300:
         raise_api_error(resp.status_code, parsed)
-    return _wrap(parsed)
+    return resp.status_code, parsed
