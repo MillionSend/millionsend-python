@@ -137,7 +137,7 @@ page = millionsend.Emails.Receiving.list(
     wait=30,                          # long-poll: answer as soon as a match arrives, up to 50 s
 )
 page.data                             # newest first
-page.held                             # with wait: [{id, inbox_id, reason, created_at}] held for screening
+page.held                             # with wait: [{id, inbox_id, reason, quarantine_reason, created_at}] held mail
 
 email = millionsend.Emails.Receiving.get(email_id, html_format="cid")
 email.extracted_text                  # the new part as plain text, hidden text removed (still untrusted)
@@ -177,7 +177,7 @@ millionsend.Inboxes.update(inbox.id, {"from_name": "Acme", "expires_in": "7d"})
 millionsend.Inboxes.remove(inbox.id)                           # also revokes its inbox-scoped keys
 
 # Codes and sign-in links, without parsing HTML (wait long-polls up to 50 s)
-code = millionsend.Inboxes.Codes.latest(inbox.id, {"from": "github.com"}, wait=30)
+code = millionsend.Inboxes.Codes.latest(inbox.id, {"from": "example.com"}, wait=30)
 code.status                           # "found" | "none" | "ambiguous" | "timeout"; code.code, code.url
 
 # Safety rules: who can write in, what the inbox may send
@@ -194,7 +194,7 @@ millionsend.Inboxes.Threads.search(inbox.id, {"query": "invoice", "from": ["exam
 millionsend.Inboxes.Threads.get(inbox.id, thread_id)
 millionsend.Inboxes.Threads.update(inbox.id, thread_id, {"read": True, "folder": "archive", "label_id": label_id})
 millionsend.Inboxes.Threads.remove(inbox.id, thread_id)        # to trash, purged after 30 days
-millionsend.Inboxes.Threads.Emails.list(inbox.id, thread_id)   # oldest first
+millionsend.Inboxes.Threads.Emails.list(inbox.id, thread_id)   # oldest first; include_quarantined=True adds held mail
 millionsend.Inboxes.Threads.Emails.get(inbox.id, thread_id, email_id)
 millionsend.Inboxes.Threads.Emails.reply(inbox.id, thread_id, email_id, {"text": "Done."}, idempotency_key=key)
 millionsend.Inboxes.Threads.Emails.forward(inbox.id, thread_id, email_id, {"to": "ops@acme.dev"})

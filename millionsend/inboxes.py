@@ -88,15 +88,23 @@ class InboxThreadEmails:
         limit: Union[int, Dict[str, Any], None] = None,
         after: Optional[str] = None,
         before: Optional[str] = None,
+        include_quarantined: Optional[bool] = None,
     ) -> Any:
-        """GET /inboxes/{id}/threads/{thread_id}/emails — oldest first; ``after`` pages toward newer."""
-        return request(
-            "GET", _path(inbox_id, "threads", thread_id, "emails"), query=list_query(limit, after, before)
-        )
+        """GET /inboxes/{id}/threads/{thread_id}/emails — oldest first; ``after`` pages toward newer.
+
+        ``include_quarantined=True`` adds held messages (full-access team keys only).
+        """
+        query = list_query(limit, after, before, include_quarantined=include_quarantined)
+        return request("GET", _path(inbox_id, "threads", thread_id, "emails"), query=query)
 
     @classmethod
-    def get(cls, inbox_id: str, thread_id: str, email_id: str) -> Any:
-        return request("GET", _path(inbox_id, "threads", thread_id, "emails", email_id))
+    def get(
+        cls, inbox_id: str, thread_id: str, email_id: str, include_quarantined: Optional[bool] = None
+    ) -> Any:
+        """GET …/emails/{email_id} — a quarantined message needs ``include_quarantined=True`` and a
+        full-access team key; otherwise it raises ``EmailQuarantinedError``."""
+        query = list_query(include_quarantined=include_quarantined)
+        return request("GET", _path(inbox_id, "threads", thread_id, "emails", email_id), query=query)
 
     @classmethod
     def reply(

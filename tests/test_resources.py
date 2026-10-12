@@ -1228,12 +1228,13 @@ def test_inbox_threads_lists_as_csv(http):
 def test_inbox_thread_emails(http):
     base = f"/inboxes/{INBOX_ID}/threads/{THREAD_ID}/emails"
     http.body = SENT_EMAIL
-    millionsend.Inboxes.Threads.Emails.list(INBOX_ID, THREAD_ID, after=EMAIL_ID)
+    millionsend.Inboxes.Threads.Emails.list(INBOX_ID, THREAD_ID, after=EMAIL_ID, include_quarantined=True)
     assert http.calls[0]["path"] == base
-    assert http.calls[0]["params"] == {"after": EMAIL_ID}
+    assert http.calls[0]["params"] == {"after": EMAIL_ID, "include_quarantined": "true"}
 
     millionsend.Inboxes.Threads.Emails.get(INBOX_ID, THREAD_ID, EMAIL_ID)
     assert http.calls[1]["path"] == f"{base}/{EMAIL_ID}"
+    assert http.calls[1]["params"] is None
 
     params = {"text": "Thanks, confirmed.", "reply_all": True}
     res = millionsend.Inboxes.Threads.Emails.reply(
@@ -1254,6 +1255,10 @@ def test_inbox_thread_emails(http):
     assert http.calls[3]["body"] == {"to": "stranger@example.com"}
     assert http.calls[3]["headers"]["Idempotency-Key"] == "f-1"
     assert res == {"kind": "draft", "draft": DRAFT}
+
+    http.status = 200
+    millionsend.Inboxes.Threads.Emails.get(INBOX_ID, THREAD_ID, EMAIL_ID, include_quarantined=True)
+    assert http.calls[4]["params"] == {"include_quarantined": "true"}
 
 
 def test_inbox_drafts(http):
