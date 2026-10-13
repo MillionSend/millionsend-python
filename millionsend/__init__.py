@@ -9,7 +9,7 @@ Configure once at the module level, then call resource classes::
 
     email = millionsend.Emails.send({
         "from": "Acme <onboarding@acme.dev>",
-        "to": "delivered@resend.dev",
+        "to": "success@simulator.amazonses.com",
         "subject": "Hello",
         "html": "<strong>it works</strong>",
     })
