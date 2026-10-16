@@ -22,7 +22,7 @@ millionsend.base_url = "https://mail.acme.dev"  # self-hosted only; omit for Mil
 
 email = millionsend.Emails.send({
     "from": "Acme <onboarding@acme.dev>",
-    "to": "delivered@resend.dev",
+    "to": "success@simulator.amazonses.com",
     "subject": "Hello from MillionSend",
     "html": "<strong>It works!</strong>",
 })
