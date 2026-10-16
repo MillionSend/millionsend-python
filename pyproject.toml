@@ -18,7 +18,7 @@ Homepage = "https://github.com/MillionSend/millionsend-python"
 Repository = "https://github.com/MillionSend/millionsend-python"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff==0.16.9"]
+dev = ["pytest>=7", "ruff==0.17.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["millionsend"]
