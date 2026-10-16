@@ -448,8 +448,7 @@ def test_batch_send_permissive_validation_and_typed_errors(http):
     assert http.calls[0]["headers"]["x-batch-validation"] == "permissive"
     assert http.calls[0]["headers"]["Idempotency-Key"] == "batch-2"
     assert res.data[0].id == "1"
-    assert res.errors[0].index == 1
-    assert res.errors[0].message == "emails.1: to is required"
+    assert res.errors[0] == {"index": 1, "message": "emails.1: to is required"}
 
 
 def test_emails_list_update_remove(http):
@@ -502,7 +501,14 @@ def test_contacts_batch_create(http):
     http.body = {
         "data": [{"object": "contact", "index": 0, "id": "c1", "status": "created"}],
         "counts": {"created": 1, "updated": 0, "skipped": 0, "failed": 1},
-        "errors": [{"index": 1, "message": "contacts.1: email is required"}],
+        "errors": [
+            {
+                "index": 1,
+                "statusCode": 422,
+                "name": "validation_error",
+                "message": "contacts.1: email is required",
+            }
+        ],
     }
     items = [{"email": "a@x.dev", "first_name": "A"}, {"first_name": "no-email"}]
     res = millionsend.Contacts.Batch.create(items, on_conflict="upsert", batch_validation="permissive")
@@ -514,6 +520,8 @@ def test_contacts_batch_create(http):
     assert res.data[0].status == "created"
     assert res.counts.failed == 1
     assert res.errors[0].index == 1
+    assert res.errors[0].statusCode == 422
+    assert res.errors[0].name == "validation_error"
 
     millionsend.Contacts.Batch.create(items)
     assert http.calls[1]["params"] is None
@@ -886,3 +894,576 @@ def test_usage_get(http):
     assert res.limits.emails_per_day == 10000
     assert res.today.emails_sent == 12
     assert res.app_url is None
+
+
+# ---- receiving and inboxes -------------------------------------------------
+INBOX_ID = "6f1c9a1e-0000-4000-8000-0000000000a1"
+THREAD_ID = "6f1c9a1e-0000-4000-8000-0000000000b1"
+EMAIL_ID = "6f1c9a1e-0000-4000-8000-0000000000c1"
+DRAFT_ID = "6f1c9a1e-0000-4000-8000-0000000000d1"
+SHARED_DOMAIN_ID = "6f1c9a1e-0000-4000-8000-0000000000e1"
+OWN_DOMAIN_ID = "6f1c9a1e-0000-4000-8000-0000000000e2"
+
+INBOX = {
+    "object": "inbox",
+    "id": INBOX_ID,
+    "name": "Signup bot",
+    "email_address": "signup-bot-7f3k@acme.agents.example.com",
+    "domain_id": SHARED_DOMAIN_ID,
+    "receiving_address": None,
+    "from_name": None,
+    "unread": 1,
+    "drafts": 0,
+    "last_received": "2026-10-12T10:05:00.000Z",
+    "created_at": "2026-10-12T10:00:00.000Z",
+    "kind": "agent",
+    "shared": True,
+    "expires_at": None,
+    "quarantined": 0,
+    "pending_approval": 0,
+}
+
+DRAFT = {
+    "object": "inbox_draft",
+    "id": DRAFT_ID,
+    "type": "reply",
+    "to": ["success@simulator.amazonses.com"],
+    "cc": [],
+    "bcc": [],
+    "subject": "Re: Confirm your email",
+    "html": None,
+    "text": "Thanks, confirmed.",
+    "thread_id": THREAD_ID,
+    "reply_to_email_id": EMAIL_ID,
+    "email_id": None,
+    "created_at": "2026-10-12T10:06:00.000Z",
+    "updated_at": "2026-10-12T10:06:00.000Z",
+    "status": "pending_approval",
+    "approval_reasons": ["send_policy"],
+    "forward": False,
+    "decided_by": None,
+    "decided_at": None,
+    "expires_at": "2026-10-19T10:06:00.000Z",
+}
+
+THREAD = {
+    "id": THREAD_ID,
+    "subject": "Confirm your email",
+    "from": "hello@example.com",
+    "to": ["signup-bot-7f3k@acme.agents.example.com"],
+    "cc": [],
+    "bcc": [],
+    "labels": [],
+    "message_count": 2,
+    "has_attachment": False,
+    "has_draft": False,
+    "read": False,
+    "received_at": "2026-10-12T10:05:00.000Z",
+    "folder": "inbox",
+}
+
+SHARED_DOMAIN = {
+    "object": "domain",
+    "id": SHARED_DOMAIN_ID,
+    "name": "acme.agents.example.com",
+    "status": "verified",
+    "created_at": "2026-10-12T09:00:00.000Z",
+    "region": "us-east-1",
+    "open_tracking": False,
+    "click_tracking": False,
+    "tracking_subdomain": None,
+    "capabilities": {"sending": "enabled", "receiving": "enabled"},
+    "receiving_catch_all": False,
+    "shared": True,
+    "sending_mode": "reply_only",
+    "sending_mode_reason": "plan",
+    "records": [],
+}
+
+OWN_DOMAIN = {
+    "id": OWN_DOMAIN_ID,
+    "name": "acme.dev",
+    "status": "verified",
+    "created_at": "2026-10-13T09:00:00.000Z",
+    "region": "us-east-1",
+    "open_tracking": True,
+    "click_tracking": True,
+    "tracking_subdomain": "links",
+    "capabilities": {"sending": "enabled", "receiving": "disabled"},
+    "receiving_catch_all": False,
+    "shared": False,
+}
+
+SENT_EMAIL = {
+    "id": EMAIL_ID,
+    "direction": "outbound",
+    "from": "signup-bot-7f3k@acme.agents.example.com",
+    "to": ["success@simulator.amazonses.com"],
+    "cc": [],
+    "bcc": [],
+    "reply_to": [],
+    "subject": "Re: Confirm your email",
+    "message_id": None,
+    "html": None,
+    "text": "Thanks, confirmed.",
+    "attachments": [],
+    "read": True,
+    "received_at": "2026-10-12T10:06:00.000Z",
+    "email_id": EMAIL_ID,
+    "thread_id": THREAD_ID,
+    "inbox_id": INBOX_ID,
+    "status": "queued",
+}
+
+
+def test_receiving_list_filters_and_flags(http):
+    http.body = {"object": "list", "has_more": False, "data": [], "held": []}
+    res = millionsend.Emails.Receiving.list(
+        {"from": "example.com", "limit": 10},
+        wait=30,
+        since="2026-10-12T10:00:00Z",
+        inbox_id=INBOX_ID,
+        to="bot@acme.dev",
+        subject_contains="code",
+        unread=False,
+        include_quarantined=True,
+    )
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == "/emails/receiving"
+    assert http.calls[0]["params"] == {
+        "from": "example.com",
+        "limit": 10,
+        "wait": 30,
+        "since": "2026-10-12T10:00:00Z",
+        "inbox_id": INBOX_ID,
+        "to": "bot@acme.dev",
+        "subject_contains": "code",
+        "unread": "false",
+        "include_quarantined": "true",
+    }
+    assert res.held == []
+
+    millionsend.Emails.Receiving.list()
+    assert http.calls[1]["params"] is None
+
+
+def test_receiving_list_unread_alone_and_unknown_inbox(http):
+    millionsend.Emails.Receiving.list(unread=False)
+    assert http.calls[0]["params"] == {"unread": "false"}
+
+    http.status = 404
+    http.body = {"statusCode": 404, "name": "not_found", "message": "Inbox not found."}
+    with pytest.raises(millionsend.NotFoundError) as ei:
+        millionsend.Emails.Receiving.list(inbox_id=INBOX_ID, wait=30)
+    assert ei.value.status_code == 404
+
+
+def test_receiving_get_keeps_extension_fields(http):
+    http.body = {
+        "object": "email",
+        "id": EMAIL_ID,
+        "extracted_text": "Your verification code is 482913",
+        "extracted": {"kinds": ["code"], "code": "482913", "link": None, "ambiguous": False},
+        "screening": {"verdict": "clean", "sender_trust": "brand_new_tier"},
+        "future_field": {"nested": True},
+    }
+    res = millionsend.Emails.Receiving.get(EMAIL_ID, html_format="cid")
+    assert http.calls[0]["path"] == f"/emails/receiving/{EMAIL_ID}"
+    assert http.calls[0]["params"] == {"html_format": "cid"}
+    assert res.extracted.code == "482913"
+    assert res.screening.sender_trust == "brand_new_tier"
+    assert res.future_field.nested is True
+
+    millionsend.Emails.Receiving.get(EMAIL_ID)
+    assert http.calls[1]["params"] is None
+
+    millionsend.Emails.Receiving.get(EMAIL_ID, {"html_format": "data_uri"})
+    assert http.calls[2]["params"] == {"html_format": "data_uri"}
+
+
+def test_receiving_reply_sent_and_held(http):
+    sent = {"object": "email", "id": EMAIL_ID, "thread_id": THREAD_ID, "inbox_id": INBOX_ID}
+    http.body = sent
+    params = {
+        "text": "Thanks, confirmed.",
+        "reply_all": True,
+        "requires_approval": False,
+        "inbox_id": INBOX_ID,
+    }
+    res = millionsend.Emails.Receiving.reply(EMAIL_ID, params, idempotency_key="reply-1")
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == f"/emails/receiving/{EMAIL_ID}/reply"
+    assert http.calls[0]["body"] == params
+    assert http.calls[0]["headers"]["Idempotency-Key"] == "reply-1"
+    assert res == {"kind": "sent", "email": sent}
+    assert res.email.thread_id == THREAD_ID
+
+    http.status = 202
+    http.body = DRAFT
+    res = millionsend.Emails.Receiving.reply(EMAIL_ID, {"text": "hi"}, {"idempotency_key": "reply-2"})
+    assert http.calls[1]["headers"]["Idempotency-Key"] == "reply-2"
+    assert res.kind == "draft"
+    assert res.draft == DRAFT
+    assert res.draft.approval_reasons == ["send_policy"]
+
+
+def test_receiving_forward_and_quarantine_error(http):
+    http.body = {"object": "email", "id": EMAIL_ID, "thread_id": None, "inbox_id": None}
+    params = {"to": ["ops@acme.dev"], "text": "FYI", "mode": "attachment"}
+    res = millionsend.Emails.Receiving.forward(EMAIL_ID, params, "fwd-1")
+    assert http.calls[0]["path"] == f"/emails/receiving/{EMAIL_ID}/forward"
+    assert http.calls[0]["body"] == params
+    assert http.calls[0]["headers"]["Idempotency-Key"] == "fwd-1"
+    assert res.kind == "sent"
+
+    http.status = 403
+    http.body = {"statusCode": 403, "name": "email_quarantined", "message": "held"}
+    with pytest.raises(millionsend.EmailQuarantinedError):
+        millionsend.Emails.Receiving.forward(EMAIL_ID, {"to": "ops@acme.dev"})
+
+
+def test_receiving_remove_and_attachments(http):
+    millionsend.Emails.Receiving.remove(EMAIL_ID)
+    assert http.calls[0]["method"] == "DELETE"
+    assert http.calls[0]["path"] == f"/emails/receiving/{EMAIL_ID}"
+
+    millionsend.Emails.Receiving.Attachments.list(EMAIL_ID, limit=5)
+    assert http.calls[1]["path"] == f"/emails/receiving/{EMAIL_ID}/attachments"
+    assert http.calls[1]["params"] == {"limit": 5}
+
+    millionsend.Emails.Receiving.Attachments.get(EMAIL_ID, "att-1")
+    assert http.calls[2]["path"] == f"/emails/receiving/{EMAIL_ID}/attachments/att-1"
+
+
+def test_inboxes_crud(http):
+    http.status = 201
+    http.body = INBOX
+    params = {
+        "email_address": "support@acme.dev",
+        "name": "Support",
+        "kind": "human",
+        "expires_in": None,
+        "safety": {"accept_from": "allowlist", "allowlist": ["*@acme.dev"], "send_cap": None},
+    }
+    res = millionsend.Inboxes.create(params)
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/inboxes"
+    assert http.calls[0]["body"] == params
+    assert res == INBOX
+
+    millionsend.Inboxes.create()
+    assert http.calls[1]["body"] == {}
+
+    http.status = 200
+    millionsend.Inboxes.list(limit=2, after=INBOX_ID, kind="agent")
+    assert http.calls[2]["path"] == "/inboxes"
+    assert http.calls[2]["params"] == {"limit": 2, "after": INBOX_ID, "kind": "agent"}
+
+    millionsend.Inboxes.get("Support@acme.dev")
+    assert http.calls[3]["path"] == "/inboxes/Support%40acme.dev"
+
+    millionsend.Inboxes.update(INBOX_ID, {"name": "Bot", "from_name": "", "expires_in": "7d"})
+    assert http.calls[4]["method"] == "PATCH"
+    assert http.calls[4]["path"] == f"/inboxes/{INBOX_ID}"
+    assert http.calls[4]["body"] == {"name": "Bot", "from_name": "", "expires_in": "7d"}
+
+    millionsend.Inboxes.remove(INBOX_ID)
+    assert http.calls[5]["method"] == "DELETE"
+    assert http.calls[5]["path"] == f"/inboxes/{INBOX_ID}"
+
+
+def test_inboxes_create_username_and_domain_id(http):
+    http.status = 201
+    http.body = INBOX
+    for params in (
+        {"username": "signup-bot"},
+        {"domain_id": SHARED_DOMAIN_ID},
+        {"domain_id": OWN_DOMAIN_ID, "username": "support"},
+    ):
+        millionsend.Inboxes.create(params)
+        assert http.calls[-1]["body"] == params
+
+
+def test_inbox_codes_latest_since(http):
+    millionsend.Inboxes.Codes.latest(INBOX_ID, since="2026-10-16T12:00:00.000Z")
+    assert http.calls[0]["params"] == {"since": "2026-10-16T12:00:00.000Z"}
+
+
+def test_inbox_thread_items_count_quarantined_only_when_asked(http):
+    http.body = {"object": "list", "has_more": False, "data": [dict(THREAD, quarantined=2)]}
+    res = millionsend.Inboxes.Threads.list(INBOX_ID, include_quarantined=True)
+    assert res.data[0].quarantined == 2
+
+    http.body = {"object": "list", "has_more": False, "data": [THREAD]}
+    res = millionsend.Inboxes.Threads.search(INBOX_ID, query="confirm")
+    assert "quarantined" not in res.data[0]
+
+
+def test_domains_shared_row(http):
+    shared_item = {k: v for k, v in SHARED_DOMAIN.items() if k not in ("object", "records")}
+    http.body = {"object": "list", "has_more": False, "data": [OWN_DOMAIN, shared_item]}
+    res = millionsend.Domains.list()
+    own, shared = res.data
+    assert own.shared is False
+    assert "sending_mode" not in own and "sending_mode_reason" not in own
+    assert (shared.shared, shared.sending_mode, shared.sending_mode_reason) == (True, "reply_only", "plan")
+    assert [d.id for d in res.data if not d.get("shared")] == [OWN_DOMAIN_ID]
+
+    # Servers before v0.14.0 send no `shared` key and list no shared row.
+    http.body = {"object": "list", "has_more": False, "data": [dict(OWN_DOMAIN)]}
+    del http.body["data"][0]["shared"]
+    assert [d.id for d in millionsend.Domains.list().data if not d.get("shared")] == [OWN_DOMAIN_ID]
+
+    http.body = SHARED_DOMAIN
+    res = millionsend.Domains.get(SHARED_DOMAIN_ID)
+    assert res == SHARED_DOMAIN
+    assert res.records == []
+
+    http.body = dict(SHARED_DOMAIN, sending_mode="open", sending_mode_reason=None)
+    res = millionsend.Domains.get(SHARED_DOMAIN_ID)
+    assert (res.sending_mode, res.sending_mode_reason) == ("open", None)
+
+    http.body = dict(SHARED_DOMAIN, sending_mode="paused_for_review")
+    assert millionsend.Domains.get(SHARED_DOMAIN_ID).sending_mode == "paused_for_review"
+
+    http.status = 403
+    http.body = {"statusCode": 403, "name": "forbidden", "message": "read-only"}
+    for call in (
+        lambda: millionsend.Domains.update({"id": SHARED_DOMAIN_ID, "open_tracking": True}),
+        lambda: millionsend.Domains.verify(SHARED_DOMAIN_ID),
+        lambda: millionsend.Domains.remove(SHARED_DOMAIN_ID),
+    ):
+        with pytest.raises(millionsend.ForbiddenError) as ei:
+            call()
+        assert (ei.value.code, ei.value.status_code) == ("forbidden", 403)
+
+
+def test_inboxes_unknown_keys_and_enum_values_pass_through(http):
+    http.body = dict(INBOX, kind="team", brand_new=[1, 2])
+    res = millionsend.Inboxes.get(INBOX_ID)
+    assert res.kind == "team"
+    assert res.brand_new == [1, 2]
+
+
+def test_inbox_safety_codes_and_quarantine(http):
+    millionsend.Inboxes.Safety.get(INBOX_ID)
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == f"/inboxes/{INBOX_ID}/safety"
+
+    millionsend.Inboxes.Safety.update(INBOX_ID, {"send_cap": 25, "accept_from": "verified"})
+    assert http.calls[1]["method"] == "PATCH"
+    assert http.calls[1]["path"] == f"/inboxes/{INBOX_ID}/safety"
+    assert http.calls[1]["body"] == {"send_cap": 25, "accept_from": "verified"}
+
+    http.body = {
+        "object": "verification_code",
+        "status": "found",
+        "kind": "otp",
+        "code": "482913",
+        "url": None,
+        "link_domain_matches_sender": None,
+        "email_id": EMAIL_ID,
+        "from": "hello@example.com",
+        "received_at": "2026-10-12T10:05:00.000Z",
+        "sender_trust": "external",
+    }
+    res = millionsend.Inboxes.Codes.latest(INBOX_ID, {"from": "example.com"}, wait=20, max_age=600)
+    assert http.calls[2]["path"] == f"/inboxes/{INBOX_ID}/codes/latest"
+    assert http.calls[2]["params"] == {"from": "example.com", "wait": 20, "max_age": 600}
+    assert res.code == "482913"
+
+    millionsend.Inboxes.Codes.latest(INBOX_ID)
+    assert http.calls[3]["params"] is None
+
+    millionsend.Inboxes.Quarantine.list(INBOX_ID, limit=3)
+    assert http.calls[4]["path"] == f"/inboxes/{INBOX_ID}/quarantine"
+    assert http.calls[4]["params"] == {"limit": 3}
+
+    http.body = {
+        "object": "inbox_release",
+        "inbox_id": INBOX_ID,
+        "email_id": EMAIL_ID,
+        "released_at": "2026-10-12T10:07:00.000Z",
+        "trusted_sender": "hello@example.com",
+    }
+    res = millionsend.Inboxes.Quarantine.release(INBOX_ID, EMAIL_ID, trust_sender=True)
+    assert http.calls[5]["method"] == "POST"
+    assert http.calls[5]["path"] == f"/inboxes/{INBOX_ID}/quarantine/{EMAIL_ID}/release"
+    assert http.calls[5]["body"] == {"trust_sender": True}
+    assert res.trusted_sender == "hello@example.com"
+
+    millionsend.Inboxes.Quarantine.release(INBOX_ID, EMAIL_ID)
+    assert http.calls[6]["body"] == {}
+
+
+def test_inbox_labels(http):
+    millionsend.Inboxes.Labels.list(INBOX_ID)
+    assert http.calls[0]["method"] == "GET"
+    assert http.calls[0]["path"] == f"/inboxes/{INBOX_ID}/labels"
+
+    millionsend.Inboxes.Labels.create(INBOX_ID, {"name": "Billing", "color": "#FF8800"})
+    assert http.calls[1]["method"] == "POST"
+    assert http.calls[1]["body"] == {"name": "Billing", "color": "#FF8800"}
+
+    millionsend.Inboxes.Labels.update(INBOX_ID, "l1", {"name": "Invoices"})
+    assert http.calls[2]["method"] == "PATCH"
+    assert http.calls[2]["path"] == f"/inboxes/{INBOX_ID}/labels/l1"
+    assert http.calls[2]["body"] == {"name": "Invoices"}
+
+    millionsend.Inboxes.Labels.remove(INBOX_ID, "l1")
+    assert http.calls[3]["method"] == "DELETE"
+    assert http.calls[3]["path"] == f"/inboxes/{INBOX_ID}/labels/l1"
+
+
+def test_inbox_threads_lists_as_csv(http):
+    http.body = {"object": "list", "has_more": False, "data": []}
+    millionsend.Inboxes.Threads.list(
+        INBOX_ID, limit=20, folders=["inbox", "archive"], labels=[], read=False, include_quarantined=True
+    )
+    assert http.calls[0]["path"] == f"/inboxes/{INBOX_ID}/threads"
+    assert http.calls[0]["params"] == {
+        "limit": 20,
+        "folders": "inbox,archive",
+        "read": "false",
+        "include_quarantined": "true",
+    }
+
+    millionsend.Inboxes.Threads.search(
+        INBOX_ID,
+        {"from": ["ada", "example.com"], "query": '"invoice 42" -spam'},
+        to=["bot@acme.dev"],
+        has_attachment=True,
+        start_date="2026-10-01",
+        end_date="2026-10-12",
+    )
+    assert http.calls[1]["path"] == f"/inboxes/{INBOX_ID}/threads/search"
+    assert http.calls[1]["params"] == {
+        "from": "ada,example.com",
+        "query": '"invoice 42" -spam',
+        "to": "bot@acme.dev",
+        "has_attachment": "true",
+        "start_date": "2026-10-01",
+        "end_date": "2026-10-12",
+    }
+
+    millionsend.Inboxes.Threads.get(INBOX_ID, THREAD_ID)
+    assert http.calls[2]["path"] == f"/inboxes/{INBOX_ID}/threads/{THREAD_ID}"
+
+    millionsend.Inboxes.Threads.update(
+        INBOX_ID, THREAD_ID, {"read": True, "folder": "archive", "label_id": "l1"}
+    )
+    assert http.calls[3]["method"] == "PATCH"
+    assert http.calls[3]["body"] == {"read": True, "folder": "archive", "label_id": "l1"}
+
+    millionsend.Inboxes.Threads.remove(INBOX_ID, THREAD_ID)
+    assert http.calls[4]["method"] == "DELETE"
+    assert http.calls[4]["path"] == f"/inboxes/{INBOX_ID}/threads/{THREAD_ID}"
+
+
+def test_inbox_thread_emails(http):
+    base = f"/inboxes/{INBOX_ID}/threads/{THREAD_ID}/emails"
+    http.body = SENT_EMAIL
+    millionsend.Inboxes.Threads.Emails.list(INBOX_ID, THREAD_ID, after=EMAIL_ID, include_quarantined=True)
+    assert http.calls[0]["path"] == base
+    assert http.calls[0]["params"] == {"after": EMAIL_ID, "include_quarantined": "true"}
+
+    millionsend.Inboxes.Threads.Emails.get(INBOX_ID, THREAD_ID, EMAIL_ID)
+    assert http.calls[1]["path"] == f"{base}/{EMAIL_ID}"
+    assert http.calls[1]["params"] is None
+
+    params = {"text": "Thanks, confirmed.", "reply_all": True}
+    res = millionsend.Inboxes.Threads.Emails.reply(
+        INBOX_ID, THREAD_ID, EMAIL_ID, params, idempotency_key="r-1"
+    )
+    assert http.calls[2]["method"] == "POST"
+    assert http.calls[2]["path"] == f"{base}/{EMAIL_ID}/reply"
+    assert http.calls[2]["body"] == params
+    assert http.calls[2]["headers"]["Idempotency-Key"] == "r-1"
+    assert res == {"kind": "sent", "email": SENT_EMAIL}
+
+    http.status = 202
+    http.body = DRAFT
+    res = millionsend.Inboxes.Threads.Emails.forward(
+        INBOX_ID, THREAD_ID, EMAIL_ID, {"to": "success@simulator.amazonses.com"}, {"idempotency_key": "f-1"}
+    )
+    assert http.calls[3]["path"] == f"{base}/{EMAIL_ID}/forward"
+    assert http.calls[3]["body"] == {"to": "success@simulator.amazonses.com"}
+    assert http.calls[3]["headers"]["Idempotency-Key"] == "f-1"
+    assert res == {"kind": "draft", "draft": DRAFT}
+
+    http.status = 200
+    millionsend.Inboxes.Threads.Emails.get(INBOX_ID, THREAD_ID, EMAIL_ID, include_quarantined=True)
+    assert http.calls[4]["params"] == {"include_quarantined": "true"}
+
+
+def test_inbox_drafts(http):
+    base = f"/inboxes/{INBOX_ID}/drafts"
+    http.status = 201
+    http.body = DRAFT
+    millionsend.Inboxes.Drafts.list(INBOX_ID, limit=5)
+    assert http.calls[0]["path"] == base
+    assert http.calls[0]["params"] == {"limit": 5}
+
+    params = {
+        "to": "success@simulator.amazonses.com",
+        "text": "Hi",
+        "thread_id": THREAD_ID,
+        "reply_to_email_id": EMAIL_ID,
+    }
+    res = millionsend.Inboxes.Drafts.create(INBOX_ID, params)
+    assert http.calls[1]["method"] == "POST"
+    assert http.calls[1]["body"] == params
+    assert res.status == "pending_approval"
+
+    millionsend.Inboxes.Drafts.get(INBOX_ID, DRAFT_ID)
+    assert http.calls[2]["path"] == f"{base}/{DRAFT_ID}"
+
+    millionsend.Inboxes.Drafts.update(INBOX_ID, DRAFT_ID, {"cc": None, "subject": None})
+    assert http.calls[3]["method"] == "PATCH"
+    assert http.calls[3]["body"] == {"cc": None, "subject": None}
+
+    millionsend.Inboxes.Drafts.remove(INBOX_ID, DRAFT_ID)
+    assert http.calls[4]["method"] == "DELETE"
+
+    millionsend.Inboxes.Drafts.reject(INBOX_ID, DRAFT_ID)
+    assert http.calls[5]["method"] == "POST"
+    assert http.calls[5]["path"] == f"{base}/{DRAFT_ID}/reject"
+    assert http.calls[5]["body"] is None
+
+
+def test_inbox_drafts_send(http):
+    sent = {"object": "inbox_draft", "id": DRAFT_ID, "thread_id": THREAD_ID, "email_id": EMAIL_ID}
+    http.body = sent
+    res = millionsend.Inboxes.Drafts.send(INBOX_ID, DRAFT_ID, idempotency_key="send-1")
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == f"/inboxes/{INBOX_ID}/drafts/{DRAFT_ID}/send"
+    assert http.calls[0]["body"] is None
+    assert "Content-Type" not in http.calls[0]["headers"]
+    assert http.calls[0]["headers"]["Idempotency-Key"] == "send-1"
+    assert res == {"kind": "sent", "email": sent}
+
+    http.status = 202
+    http.body = DRAFT
+    assert millionsend.Inboxes.Drafts.send(INBOX_ID, DRAFT_ID) == {"kind": "draft", "draft": DRAFT}
+
+    http.status = 403
+    http.body = {"statusCode": 403, "name": "approval_required", "message": "waits for a person"}
+    with pytest.raises(millionsend.ApprovalRequiredError):
+        millionsend.Inboxes.Drafts.send(INBOX_ID, DRAFT_ID)
+
+
+def test_inbox_fields_on_existing_resources(http):
+    millionsend.Webhooks.create(
+        {"endpoint": "https://acme.dev/hooks", "events": ["inbox.email.received"], "inbox_ids": [INBOX_ID]}
+    )
+    assert http.calls[0]["body"]["inbox_ids"] == [INBOX_ID]
+
+    millionsend.Webhooks.update({"id": "w1", "inbox_ids": None})
+    assert http.calls[1]["body"] == {"inbox_ids": None}
+
+    millionsend.ApiKeys.create({"name": "agent", "permission": "full_access", "inbox_id": INBOX_ID})
+    assert http.calls[2]["body"] == {"name": "agent", "permission": "full_access", "inbox_id": INBOX_ID}
+
+    millionsend.Domains.update({"id": "d1", "receiving_catch_all": False})
+    assert http.calls[3]["path"] == "/domains/d1"
+    assert http.calls[3]["body"] == {"receiving_catch_all": False}

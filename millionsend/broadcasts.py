@@ -3,6 +3,8 @@
 Targeting is an optional ``segment_id`` and/or ``topic_id`` on create/update;
 neither set means every contact of the team. ``update`` and ``send`` take
 ``(broadcast_id, ...)`` or resend-python's single ``{"broadcast_id": ..., **fields}`` dict.
+Broadcasts never send from the shared domain: ``send`` (or ``create`` with ``send: True``)
+raises ``InboxSendPolicyError``.
 """
 
 from typing import Any, Dict, Optional, Tuple, Union

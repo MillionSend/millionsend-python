@@ -1,4 +1,9 @@
-"""Sending domains — create returns the DNS records to publish; verify re-checks them."""
+"""Sending domains — create returns the DNS records to publish; verify re-checks them.
+
+GET /domains ends with the team's subdomain of the shared domain (``shared: True``), which
+only sends from an inbox's own address. That row is read-only: ``update``, ``verify`` and
+``remove`` raise ``ForbiddenError``. Servers before MillionSend v0.14.0 send no ``shared`` key.
+"""
 
 from typing import Any, Dict, Optional
 
@@ -22,6 +27,7 @@ class Domains:
         after: Optional[str] = None,
         before: Optional[str] = None,
     ) -> Any:
+        """GET /domains — the team's own domains newest first, then the shared row."""
         return request("GET", "/domains", query=list_query(limit, after, before))
 
     @classmethod

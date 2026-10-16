@@ -173,7 +173,5 @@ class Contacts:
         """
         query = list_query(limit, after, before, include=include) or {}
         segment_id = query.pop("segment_id", segment_id)
-        if isinstance(query.get("include"), list):
-            query["include"] = ",".join(query["include"])
         path = f"/segments/{path_id(segment_id)}/contacts" if segment_id else "/contacts"
         return request("GET", path, query=query or None)
