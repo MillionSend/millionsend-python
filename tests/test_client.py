@@ -161,6 +161,7 @@ def test_transport_failure_has_status_code_none(http):
     with pytest.raises(MillionSendError) as ei:
         millionsend.Emails.get("e1")
     assert ei.value.status_code is None
+    assert ei.value.retry_after is None
     assert "ECONNREFUSED" in ei.value.message
     # transport failures are the base error, never a typed API subclass
     assert type(ei.value) is MillionSendError
@@ -234,6 +235,7 @@ def test_every_api_error_name_maps_to_a_subclass(http):
         "email_quarantined": (403, millionsend.EmailQuarantinedError),
         "email_blocked": (410, millionsend.EmailBlockedError),
         "too_many_waits": (429, millionsend.TooManyWaitsError),
+        "name_review_unavailable": (503, millionsend.NameReviewUnavailableError),
         "internal_server_error": (500, millionsend.InternalServerError),
         "application_error": (500, millionsend.ApplicationError),
     }
@@ -245,6 +247,35 @@ def test_every_api_error_name_maps_to_a_subclass(http):
         assert ei.value.code == name
         assert ei.value.status_code == status
         assert isinstance(ei.value, MillionSendError)
+
+
+def test_retry_after_header_in_seconds(http):
+    http.status = 503
+    http.body = {"statusCode": 503, "name": "name_review_unavailable", "message": "try again later"}
+    http.headers = {"Retry-After": "300"}
+    with pytest.raises(millionsend.NameReviewUnavailableError) as ei:
+        millionsend.Inboxes.create({"username": "signup-bot"})
+    assert ei.value.status_code == 503
+    assert ei.value.retry_after == 300
+
+    for headers in ({}, {"retry-after": "Fri, 16 Oct 2026 12:00:00 GMT"}, {"retry-after": "-1"}):
+        http.headers = headers
+        with pytest.raises(millionsend.NameReviewUnavailableError) as ei:
+            millionsend.Inboxes.create()
+        assert ei.value.retry_after is None
+
+
+def test_unknown_route_404_is_text_on_old_servers_and_json_since_v0_13(http):
+    http.status = 404
+    http.body = "404 Not Found"
+    with pytest.raises(millionsend.ApplicationError) as ei:
+        millionsend.Emails.get("e1")
+    assert (ei.value.code, ei.value.status_code) == ("application_error", 404)
+
+    http.body = {"statusCode": 404, "name": "not_found", "message": "The requested endpoint does not exist."}
+    with pytest.raises(NotFoundError) as ei:
+        millionsend.Emails.get("e1")
+    assert (ei.value.code, ei.value.status_code) == ("not_found", 404)
 
 
 def test_long_poll_wait_stretches_the_deadline(http, monkeypatch):

@@ -245,5 +245,5 @@ def _dispatch(
             parsed = text
 
     if not 200 <= resp.status_code < 300:
-        raise_api_error(resp.status_code, parsed)
+        raise_api_error(resp.status_code, parsed, resp.headers.get("retry-after"))
     return resp.status_code, parsed

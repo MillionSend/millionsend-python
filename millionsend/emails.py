@@ -23,7 +23,13 @@ class Emails:
         options: Options = None,
         idempotency_key: Optional[str] = None,
     ) -> Any:
-        """POST /emails — supports an Idempotency-Key."""
+        """POST /emails — supports an Idempotency-Key.
+
+        ``from`` may be an inbox's address on the shared domain while its ``sending_mode`` is
+        ``"open"``: that exact address (no +tag), with no display name or the inbox's
+        ``from_name``, no ``reply_to``, ``attachments``, ``headers`` or ``scheduled_at``, and at
+        most 10 distinct recipients across to, cc and bcc.
+        """
         return request("POST", "/emails", body=params, **request_options(options, idempotency_key))
 
     @classmethod
@@ -76,6 +82,7 @@ class Batch:
 
         ``batch_validation`` is ``"strict"`` (default: any invalid item rejects the
         batch) or ``"permissive"`` (valid items are sent, the rest come back in ``errors``).
+        Items never send from the shared domain: such an item is refused as ``inbox_send_policy``.
         """
         return request(
             "POST",

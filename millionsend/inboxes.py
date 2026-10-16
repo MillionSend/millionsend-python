@@ -24,7 +24,11 @@ class InboxSafety:
 
     @classmethod
     def update(cls, inbox_id: str, params: Dict[str, Any]) -> Any:
-        """PATCH /inboxes/{id}/safety — omitted fields keep their value; inbox-scoped keys get a 403."""
+        """PATCH /inboxes/{id}/safety — omitted fields keep their value; inbox-scoped keys get a 403.
+
+        On the shared domain ``send_policy`` can't be ``"allowlist"``, and is ``"open"`` only while
+        the shared row's ``sending_mode`` is ``"open"``.
+        """
         return request("PATCH", _path(inbox_id, "safety"), body=params)
 
 
@@ -34,7 +38,9 @@ class InboxCodes:
         """GET /inboxes/{id}/codes/latest — the newest delivered verification code or sign-in link.
 
         Query: ``from`` (an address, or a domain covering its subdomains; pass it in ``params``),
-        ``wait`` (long-poll up to 50 s), ``max_age`` (seconds, 60..86400).
+        ``wait`` (long-poll up to 50 s), ``max_age`` (seconds since delivery, 60..86400), ``since``
+        (ISO 8601: only mail received after it; pass the previous code's ``received_at`` so a
+        second sign-in waits for its own code).
         """
         return request("GET", _path(inbox_id, "codes", "latest"), query=list_query(params, **query))
 
@@ -159,7 +165,8 @@ class InboxThreads:
         """GET /inboxes/{id}/threads — most recently active first.
 
         Filters: ``folders`` and ``labels`` (lists, sent comma-separated), ``read``,
-        ``include_quarantined``.
+        ``include_quarantined`` (full-access team keys only; each item then carries ``quarantined``,
+        its held messages not yet released).
         """
         return request("GET", _path(inbox_id, "threads"), query=list_query(limit, after, before, **filters))
 
@@ -260,10 +267,16 @@ class Inboxes:
 
     @classmethod
     def create(cls, params: Optional[Dict[str, Any]] = None) -> Any:
-        """POST /inboxes — email_address?, name?, from_name?, forwarding?, kind? (default
-        ``"agent"``), expires_in? (``"24h"``, ``"7d"``, or None for never), safety? (partial).
+        """POST /inboxes — email_address?, username?, domain_id?, name? (1..320 characters),
+        from_name?, forwarding?, kind? (default ``"agent"``), expires_in? (``"1h"``..``"365d"``;
+        omitted or None, it never expires), safety? (partial).
 
-        Without ``email_address`` the inbox gets a random address on the instance's shared domain.
+        Without ``email_address``, or with the shared row's ``domain_id``, the address is
+        ``username@<team>.<shared domain>``, or random without ``username``. The ``domain_id``
+        of one of the team's own domains needs ``username``. On the shared domain a ``username``
+        or ``from_name`` is reviewed: a refused one raises ``ValidationError`` (422; 409 when the
+        address is taken), and ``NameReviewUnavailableError`` (503) or ``RateLimitExceededError``
+        (429) carry ``retry_after``.
         """
         return request("POST", "/inboxes", body=params or {})
 
@@ -285,7 +298,10 @@ class Inboxes:
 
     @classmethod
     def update(cls, inbox_id: str, params: Dict[str, Any]) -> Any:
-        """PATCH /inboxes/{id} — name, from_name (``""`` removes it), expires_in."""
+        """PATCH /inboxes/{id} — name, from_name (``""`` removes it), expires_in.
+
+        A ``from_name`` on the shared domain is reviewed as on :meth:`create`.
+        """
         return request("PATCH", _path(inbox_id), body=params)
 
     @classmethod

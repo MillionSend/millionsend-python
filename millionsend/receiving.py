@@ -50,6 +50,8 @@ class Receiving:
         carries ``held``), ``since``, ``inbox_id``, ``to``, ``from``, ``subject_contains``,
         ``unread``, ``include_quarantined``, ``quarantined``. ``from`` is a Python keyword, so
         pass it in the options dict: ``Receiving.list({"from": "example.com", "wait": 30})``.
+        An unknown ``inbox_id`` raises ``NotFoundError`` at once, even with ``wait``. ``unread``
+        needs ``inbox_id`` unless the key is restricted to one inbox.
         """
         return request("GET", "/emails/receiving", query=list_query(limit, after, before, **filters))
 

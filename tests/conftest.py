@@ -3,14 +3,16 @@
 import json
 
 import pytest
+from requests.structures import CaseInsensitiveDict
 
 import millionsend
 from millionsend import _client
 
 
 class FakeResponse:
-    def __init__(self, status, body):
+    def __init__(self, status, body, headers=None):
         self.status_code = status
+        self.headers = CaseInsensitiveDict(headers or {})
         if body is None:
             self.text = ""
         elif isinstance(body, str):
@@ -20,12 +22,13 @@ class FakeResponse:
 
 
 class Recorder:
-    """Records calls and returns a canned response; set .status/.body per test."""
+    """Records calls and returns a canned response; set .status/.body/.headers per test."""
 
     def __init__(self):
         self.calls = []
         self.status = 200
         self.body = {"id": "id_1"}
+        self.headers = {}
         self.exc = None
 
     def __call__(self, method, url, headers=None, data=None, params=None, timeout=None):
@@ -42,7 +45,7 @@ class Recorder:
         )
         if self.exc is not None:
             raise self.exc
-        return FakeResponse(self.status, self.body)
+        return FakeResponse(self.status, self.body, self.headers)
 
 
 @pytest.fixture

@@ -17,6 +17,8 @@ class MillionSendError(Exception):
             or ``None`` for a client-side failure.
         message: human-readable message.
         status_code: HTTP status, or ``None`` when the request never reached the API.
+        retry_after: the response's ``retry-after`` header in seconds, or ``None`` when it
+            had none. The SDK never retries by itself.
     """
 
     def __init__(
@@ -24,11 +26,13 @@ class MillionSendError(Exception):
         message: str,
         code: Optional[str] = None,
         status_code: Optional[int] = None,
+        retry_after: Optional[int] = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
         self.status_code = status_code
+        self.retry_after = retry_after
 
 
 class MissingApiKeyError(MillionSendError):
@@ -100,11 +104,17 @@ class ConcurrentIdempotentRequestsError(MillionSendError):
 
 
 class InboxSendPolicyError(MillionSendError):
-    """403: the inbox's rules hold this send; create a draft for a person to approve instead."""
+    """403: the inbox's rules hold this send (a draft a person approves can still go out), or
+    the shared domain's sending mode refuses it."""
 
 
 class InboxSendCapReachedError(MillionSendError):
-    """429: the inbox reached its daily send cap."""
+    """429: the inbox's daily send cap, or the team's daily limit for mail from the shared
+    domain, is reached; don't retry before ``retry_after``."""
+
+
+class NameReviewUnavailableError(MillionSendError):
+    """503: a name on the shared domain can't be reviewed right now; retry after ``retry_after``."""
 
 
 class ApprovalRequiredError(MillionSendError):
@@ -156,13 +166,14 @@ ERROR_TYPES = {
     "email_quarantined": EmailQuarantinedError,
     "email_blocked": EmailBlockedError,
     "too_many_waits": TooManyWaitsError,
+    "name_review_unavailable": NameReviewUnavailableError,
     "internal_server_error": InternalServerError,
     "application_error": ApplicationError,
 }
 
 
-def raise_api_error(status: int, parsed: object) -> None:
-    """Coerce a parsed non-2xx body into the canonical error and raise it."""
+def raise_api_error(status: int, parsed: object, retry_after: Optional[str] = None) -> None:
+    """Coerce a parsed non-2xx body and its ``retry-after`` header into the canonical error and raise it."""
     if isinstance(parsed, dict):
         name = parsed.get("name")
         name = name if isinstance(name, str) else "application_error"
@@ -174,4 +185,11 @@ def raise_api_error(status: int, parsed: object) -> None:
         name = "application_error"
         message = f"Request failed with status {status}"
         status_code = status
-    raise ERROR_TYPES.get(name, MillionSendError)(message, code=name, status_code=status_code)
+    # Only delta-seconds, the form the API sends; an HTTP-date or junk reads as no hint.
+    seconds = (retry_after or "").strip()
+    raise ERROR_TYPES.get(name, MillionSendError)(
+        message,
+        code=name,
+        status_code=status_code,
+        retry_after=int(seconds) if seconds.isdecimal() else None,
+    )
