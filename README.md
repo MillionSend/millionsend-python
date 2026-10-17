@@ -102,6 +102,7 @@ except MillionSendError as e:
 - `e.status_code` is the HTTP status, or `None` for client-side/transport failures (connection refused, DNS, timeout).
 - `e.retry_after` is the response's `retry-after` header in seconds, or `None` when it had none (see [Retries](#retries)).
 - `Emails.send` / `Batch.send` raise `AllRecipientsSuppressedError` (422 `all_recipients_suppressed`) when every `to` recipient is on the suppression list or opted out of the send's `topic_id`. An `Emails.send` that the suppression list alone refuses still keeps a metadata-only `suppressed` email, which fires `email.suppressed`, and each retry keeps another, even with the same `idempotency_key` (a refused send doesn't hold its key).
+- `Inboxes.Quarantine.release` raises the base `MillionSendError` with `e.code` `trust_not_allowed` (403) or `held_by_screening` (409), see [Inboxes](#inboxes); it answers `forbidden` (403) and `screening_unavailable` (503) only to MCP clients.
 
 Subclasses: `MissingApiKeyError`, `InvalidApiKeyError`, `ValidationError`, `AllRecipientsSuppressedError`, `InvalidParameterError`, `InvalidPayloadError`, `PayloadTooLargeError`, `NotFoundError`, `ConflictError`, `ForbiddenError`, `RestrictedApiKeyError`, `SendingPausedError`, `RateLimitExceededError`, `DailyQuotaExceededError`, `PlanLimitReachedError`, `InvalidIdempotentRequestError`, `ConcurrentIdempotentRequestsError`, `InboxSendPolicyError`, `InboxSendCapReachedError`, `ApprovalRequiredError`, `EmailQuarantinedError`, `EmailBlockedError`, `TooManyWaitsError`, `NameReviewUnavailableError`, `InternalServerError`, `ApplicationError`. Unknown names raise the base `MillionSendError`. A body that isn't JSON, such as an older server's plain-text 404 for an unknown route, raises `ApplicationError` with the HTTP status. Messages are for people and may change: branch on `e.code` and `e.status_code`, not on the message.
 
@@ -227,7 +228,7 @@ millionsend.Inboxes.Safety.update(inbox.id, {"accept_from": "allowlist", "allowl
 
 # Quarantine: held mail, kept until a person releases it
 millionsend.Inboxes.Quarantine.list(inbox.id)
-millionsend.Inboxes.Quarantine.release(inbox.id, email_id, trust_sender=True)
+millionsend.Inboxes.Quarantine.release(inbox.id, email_id)
 
 # Threads and their messages
 millionsend.Inboxes.Threads.list(inbox.id, folders=["inbox", "archive"], read=False)
@@ -259,6 +260,8 @@ millionsend.Inboxes.Drafts.remove(inbox.id, draft_id)
 Replies, forwards and `Drafts.send` return `{"kind": "sent", "email": ...}` or, when the inbox's rules hold the message for a person (HTTP 202), `{"kind": "draft", "draft": ...}`. A key restricted to the inbox cannot send a draft that waits for approval (`ApprovalRequiredError`); a person in the dashboard or a full-access team key approves it. An agent's reply to a `Reply-To` at another organization is held the same way, with `"reply_to_redirect"` among `approval_reasons`. Hosted agent settings (`/inboxes/{id}/agent`) are not exposed: MillionSend runs no agent of its own.
 
 With `include_quarantined=True` (full-access team keys), the items of `Threads.list` and `Threads.search` carry `quarantined`: their held messages not yet released.
+
+On an agent inbox with `screening` on, mail held before screening ran (`not_allowlisted`, `unauthenticated_sender`, `failed_auth`) is screened at release when screening can run: if it finds prompt injection or phishing, the email stays held as `injection` or `phishing` (409 `held_by_screening`). `trust_sender=True` also adds the sender to the allowlist, only for mail held as `not_allowlisted` from a sender that authenticated (`sender_trust` `"external"`); anything else is refused with 403 `trust_not_allowed`.
 
 #### Inboxes on the shared domain
 
@@ -542,6 +545,7 @@ Self-hosting? Each feature needs at least this MillionSend version:
 | Newest-first lists; a JSON 404 for unknown routes; `since` on `Codes.latest`; `quarantined` on thread items; inbox names up to 320 characters; `NotFoundError` at once for an unknown `inbox_id`; `unread` with an inbox-scoped key | v0.13.0 |
 | The shared row in `Domains.list()` (`shared`, `sending_mode`, `sending_mode_reason`); `domain_id` on `Inboxes.create`; `subject` up to 998 characters | v0.14.0 |
 | The `email.scheduled`, `email.failed` and `email.suppressed` webhook events; a `suppressed` email kept on `AllRecipientsSuppressedError` | v0.15.1 |
+| Release rules: `trust_sender` only for a `not_allowlisted` hold from an authenticated sender (`trust_not_allowed`); screening at release (`held_by_screening`) | v0.16.0 |
 
 Older servers ignore options they don't know: before v0.12.0 `username` is dropped and the address is random, before v0.14.0 `domain_id` is dropped and the inbox lands on the shared domain, and before v0.13.0 `since` is dropped, so a code you already used can come back. If you must support them, check the created inbox's `email_address`, and treat a code whose `received_at` isn't after `since` as none.
 
