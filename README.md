@@ -468,7 +468,9 @@ rotated.signing_secret
 rotated.previous_secret_expires_at   # None once the old secret stops signing; also on get()
 ```
 
-Events include `email.received` and the `inbox.*` events (`inbox.created`, `inbox.updated`, `inbox.deleted`, `inbox.expired`, `inbox.thread.created`, `inbox.thread.folder.updated`, `inbox.thread.labels.updated`, `inbox.email.received`, `inbox.email.sent`, `inbox.email.quarantined`, `inbox.draft.created`, `inbox.draft.updated`, `inbox.draft.sent`, `inbox.draft.deleted`). Inbox events reach only endpoints that list them by name. `inbox_ids` limits an endpoint's inbox events and `email.received` to those inboxes (`None` = every inbox). A shared-domain inbox deleted after 90 idle days fires `inbox.expired`, then `inbox.deleted`, and inbox events from a send in the dashboard carry `data.source: "dashboard"`.
+Events include `email.scheduled`, `email.failed`, `email.suppressed`, `email.received` and the `inbox.*` events (`inbox.created`, `inbox.updated`, `inbox.deleted`, `inbox.expired`, `inbox.thread.created`, `inbox.thread.folder.updated`, `inbox.thread.labels.updated`, `inbox.email.received`, `inbox.email.sent`, `inbox.email.quarantined`, `inbox.draft.created`, `inbox.draft.updated`, `inbox.draft.sent`, `inbox.draft.deleted`). Inbox events reach only endpoints that list them by name. `inbox_ids` limits an endpoint's inbox events and `email.received` to those inboxes (`None` = every inbox). A shared-domain inbox deleted after 90 idle days fires `inbox.expired`, then `inbox.deleted`, and inbox events from a send in the dashboard carry `data.source: "dashboard"`.
+
+`email.failed` says why in `data.failed.reason`, and `email.suppressed` in `data.suppressed` (`type`, `message` and `reason`); new values can appear, so don't treat them as a closed list. On servers before v0.15.1, a webhook that names `email.scheduled`, `email.failed` or `email.suppressed` raises `ValidationError` (422).
 
 ### API keys
 
@@ -539,6 +541,7 @@ Self-hosting? Each feature needs at least this MillionSend version:
 | `username`; inboxes that never expire by default, `expires_in` `"1h"` to `"365d"`; sending from the shared domain; name reviews (`NameReviewUnavailableError`); `statusCode` and `name` on contacts-batch errors | v0.12.0 |
 | Newest-first lists; a JSON 404 for unknown routes; `since` on `Codes.latest`; `quarantined` on thread items; inbox names up to 320 characters; `NotFoundError` at once for an unknown `inbox_id`; `unread` with an inbox-scoped key | v0.13.0 |
 | The shared row in `Domains.list()` (`shared`, `sending_mode`, `sending_mode_reason`); `domain_id` on `Inboxes.create`; `subject` up to 998 characters | v0.14.0 |
+| The `email.scheduled`, `email.failed` and `email.suppressed` webhook events | v0.15.1 |
 
 Older servers ignore options they don't know: before v0.12.0 `username` is dropped and the address is random, before v0.14.0 `domain_id` is dropped and the inbox lands on the shared domain, and before v0.13.0 `since` is dropped, so a code you already used can come back. If you must support them, check the created inbox's `email_address`, and treat a code whose `received_at` isn't after `since` as none.
 
