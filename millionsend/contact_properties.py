@@ -1,4 +1,4 @@
-"""Custom contact property definitions (``key`` + ``type`` string|number)."""
+"""Custom contact property definitions (``key`` + ``type`` string|number|date)."""
 
 from typing import Any, Dict, Optional
 
@@ -8,7 +8,12 @@ from ._client import list_query, path_id, request, split_id
 class ContactProperties:
     @classmethod
     def create(cls, params: Dict[str, Any]) -> Any:
-        """POST /contact-properties — key, type (string|number), fallback_value?"""
+        """POST /contact-properties — key, type (string|number|date), fallback_value?
+
+        ``date`` is a MillionSend extension. Its values and ``fallback_value`` must read as an
+        ISO 8601 date (midnight UTC) or date-time (UTC when it names no zone), or as Unix time in
+        seconds or milliseconds from 2000 to 2100, or the write raises ``ValidationError`` (422).
+        """
         return request("POST", "/contact-properties", body=params)
 
     @classmethod
