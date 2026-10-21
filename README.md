@@ -348,6 +348,14 @@ millionsend.ContactProperties.update({"id": prop.id, "fallback_value": None})  #
 millionsend.ContactProperties.remove(prop.id)
 ```
 
+`type` is `"string"` or `"number"`, as on Resend, or `"date"` (MillionSend extension). A date property's values and `fallback_value` must read as a date, or the write raises `ValidationError` (422):
+
+- an ISO 8601 date, such as `2026-01-08`, read as midnight UTC;
+- a date-time with `T` or a space, such as `2026-01-08T10:30:00Z` or `2026-01-08 10:30`, read as UTC when it names no zone;
+- Unix time in seconds or milliseconds between 2000 and 2100, such as `1767225600`.
+
+`Contacts.get` returns each property as `{type, value}`; a date's value is the string as written, as in `{"type": "date", "value": "2026-01-08"}`.
+
 ### Topics
 
 ```python
@@ -402,6 +410,8 @@ millionsend.Segments.list()
 millionsend.Segments.update(segment.id, {"name": "Pro tier"})
 millionsend.Segments.remove(segment.id)
 ```
+
+`created_at` and any property take four date ops: `before` and `after` with an ISO 8601 date or date-time, and `in_last_days` and `not_in_last_days` with a whole number of days as a string, from `"1"` to `"36500"`, as in `{"field": "property:last_login", "op": "not_in_last_days", "value": "90"}`. A property's value reads as a date the way a `date` property's values do (see [Contact properties](#contact-properties)), whatever its type, and one that isn't a date matches none of them.
 
 ### Suppressions
 
@@ -546,6 +556,7 @@ Self-hosting? Each feature needs at least this MillionSend version:
 | The shared row in `Domains.list()` (`shared`, `sending_mode`, `sending_mode_reason`); `domain_id` on `Inboxes.create`; `subject` up to 998 characters | v0.14.0 |
 | The `email.scheduled`, `email.failed` and `email.suppressed` webhook events; a `suppressed` email kept on `AllRecipientsSuppressedError` | v0.15.1 |
 | Release rules: `trust_sender` only for a `not_allowlisted` hold from an authenticated sender (`trust_not_allowed`); screening at release (`held_by_screening`) | v0.16.0 |
+| `date` contact properties; segment date ops on properties, and `in_last_days` / `not_in_last_days` on `created_at` | v0.22.0 |
 
 Older servers ignore options they don't know: before v0.12.0 `username` is dropped and the address is random, before v0.14.0 `domain_id` is dropped and the inbox lands on the shared domain, and before v0.13.0 `since` is dropped, so a code you already used can come back. If you must support them, check the created inbox's `email_address`, and treat a code whose `received_at` isn't after `since` as none.
 
@@ -566,7 +577,7 @@ Method names and payloads match. Notes:
 
 - **Same resources**: `Emails`, `Batch`, `Contacts` (with `.Topics`, `.Segments`), `ContactProperties`, `Topics`, `Broadcasts`, `Suppressions` (with `.Batch`), `Domains`, `Webhooks`, `ApiKeys`, `Templates`. Payloads are sent verbatim, so a resend-python payload works as-is.
 - **No audiences**: contacts are team-global, so there is no `Audiences` resource and no `audience_id` params. The API's `/audiences/...` routes are a compatibility shim for raw HTTP callers and are deliberately not exposed here. Resend's `Segments` is an alias of audiences; MillionSend's `Segments` is the distinct dynamic-filter feature.
-- **MillionSend extensions** (no Resend equivalent): `Segments`, `Contacts.Batch`, `Contacts.list(segment_id=...)`, `Contacts.preferences_link`, `Webhooks.rotate`, `Usage`, `Deliverability`, `Emails.get_insights`, `Emails.Receiving.reply` / `forward` / `remove`, and `Inboxes` (Resend's Inboxes are not in resend-python yet).
+- **MillionSend extensions** (no Resend equivalent): `Segments`, `Contacts.Batch`, `Contacts.list(segment_id=...)`, `Contacts.preferences_link`, `Webhooks.rotate`, `Usage`, `Deliverability`, `Emails.get_insights`, `Emails.Receiving.reply` / `forward` / `remove`, the `date` contact property type, and `Inboxes` (Resend's Inboxes are not in resend-python yet).
 - **Not available**: Resend's `ApiKeys.update`, `Webhooks` event history/replay/`verify`, `Emails.share` / `Emails.metrics`, `Broadcasts.recipients` / `clicked_links`, `Contacts.Segments.list`, `DomainClaims`, `ContactImports`, `Automations`, `Events`, `Logs`, `OAuthGrants`, and the `*_async` variants.
 - MillionSend raises on API errors just like `resend`; the exception carries `.code` / `.status_code` / `.message`.
 
