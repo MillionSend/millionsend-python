@@ -25,7 +25,8 @@ pytestmark = pytest.mark.skipif(
 
 def test_contact_lifecycle():
     stamp = int(time.time() * 1000)
-    email = f"sdk-e2e-{stamp}@example.com"
+    # The API refuses new contacts at domains that can never receive mail, such as example.com.
+    email = f"success+sdk-e2e-{stamp}@simulator.amazonses.com"
     created = millionsend.Contacts.create({"email": email, "first_name": "Ada"})
     assert created.id
     try:
